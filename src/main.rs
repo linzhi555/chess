@@ -1,12 +1,12 @@
-#[derive(Debug)]
-#[derive(Clone)]
+use lexer::{Lexer, Token};
+use std::io::{self, BufRead};
+#[derive(Debug, Clone)]
 struct Vec2 {
     x: i32,
     y: i32,
 }
 
-#[derive(Debug)]
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 struct Pawn {
     pos: Vec2,
     double_start: bool,
@@ -20,8 +20,7 @@ impl Pawn {
     }
 }
 
-#[derive(Debug)]
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 struct King {
     pos: Vec2,
     castling: bool,
@@ -35,16 +34,14 @@ impl King {
     }
 }
 
-#[derive(Debug)]
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 enum Piece {
     Pawn(Pawn),
     King(King),
     None,
 }
 
-#[derive(Debug)]
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 enum Stage {
     WhiteTurn,
     BlackTurn,
@@ -54,8 +51,7 @@ enum Stage {
     BlackWin,
 }
 
-#[derive(Debug)]
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 struct Game {
     stage: Stage,
     board: Vec<Piece>,
@@ -72,54 +68,110 @@ impl Game {
         game
     }
 
-    fn pre_check(&mut self,c: &str) -> bool{
-
-
+    fn pre_check(&mut self, c: &Cmd) -> bool {
         true
     }
 
-
-    fn after_check(&mut self,c:&str) -> bool{
+    fn after_check(&mut self, c: &Cmd) -> bool {
         true
     }
-
-
 }
 
-fn get_command() -> String{
-    String::from("asdfasd")
+fn get_line() -> String {
+    let stdin = io::stdin();
+    let line1 = stdin.lock().lines().next().unwrap().unwrap();
+
+    line1
 }
 
+fn parse_command(s: &str) -> Result<Cmd, &str> {
+    let mut lexer = Lexer::new();
+    lexer.add_keyword("move");
+    lexer.add_keyword("promote");
+    lexer.tokenize(s);
+    println!("{:?}", lexer);
+    let res = parse(&lexer.result);
+    res
+}
+
+fn parse(v: &Vec<Token>) -> Result<Cmd, &'static str> {
+    if v.get(0).is_none() {
+        return Err("cmd is empty");
+    } else {
+        match v.get(0).unwrap() {
+            Token::Keyword(x) => {
+                if x.as_str() == "move" {
+                    Ok(Cmd::Move(MoveCmd {
+                        from: Vec2 { x: 0, y: 1 },
+                        to: Vec2 { x: 1, y: 2 },
+                    }))
+                } else if x.as_str() == "promote" {
+                    Ok(Cmd::Promote(PromoteCmd {
+                        from: Vec2 { x: 0, y: 1 },
+                        to: "queen".to_string(),
+                    }))
+                } else {
+                    Err("cmd can not parse")
+                }
+            }
+
+            _ => Err("cmd can not parse"),
+        }
+    }
+}
+
+#[derive(Debug)]
+struct MoveCmd {
+    from: Vec2,
+    to: Vec2,
+}
+
+#[derive(Debug)]
+struct PromoteCmd {
+    from: Vec2,
+    to: String,
+}
+
+#[derive(Debug)]
+enum Cmd {
+    Move(MoveCmd),
+    Promote(PromoteCmd),
+}
 
 fn main() {
     let mut game = Game::new();
-
+    println!("{:?}", game);
     let mut i = -1;
     loop {
         i += 1;
         if i == 10 {
             game.stage = Stage::BlackWin;
         }
-        
-        println!("{:?}",game);
-        
-        let c = get_command();
-        let oldstate=game.clone(); 
+
+        let s = get_line();
+        let c = parse_command(&s);
+        if c.is_err() {
+            println!("{:?}", c);
+            continue;
+        }
+        let c = c.unwrap();
+        println!("{:?}", c);
+
+        let oldstate = game.clone();
         let res = game.pre_check(&c);
         if res != true {
-            game=oldstate;
+            game = oldstate;
             continue;
         }
 
         let res = game.after_check(&c);
 
         if res != true {
-            game=oldstate;
+            game = oldstate;
             continue;
         }
 
-
-
+        println!("{:?}", game);
         match game.stage {
             Stage::WhiteWin => {
                 println!("WhiteWin! the game is over");
