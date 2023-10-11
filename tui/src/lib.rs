@@ -1,5 +1,7 @@
 use std::io::{stdin, stdout, Stdout, Write};
-use std::sync::mpsc::Sender;
+use std::sync::mpsc;
+use std::sync::mpsc::{Receiver, Sender};
+use std::{thread, time};
 use termion::input::TermRead;
 use termion::raw::IntoRawMode;
 use termion::{event::Key, raw::RawTerminal};
@@ -9,6 +11,7 @@ pub struct Ui {
     buffer: Vec<char>,
     stdout: Option<RawTerminal<Stdout>>,
     message: String,
+    out: String,
 }
 
 impl Ui {
@@ -18,6 +21,7 @@ impl Ui {
             buffer: Vec::new(),
             stdout: None,
             message: String::new(),
+            out: String::new(),
         }
     }
 
@@ -52,8 +56,8 @@ impl Ui {
     fn message(&mut self, s: &str) {
         self.message = s.to_string()
     }
-    fn clear_all(&mut self){
-        write!(self.stdout.as_mut().unwrap(),"{}", termion::clear::All,).unwrap();
+    fn clear_all(&mut self) {
+        write!(self.stdout.as_mut().unwrap(), "{}", termion::clear::All,).unwrap();
         self.stdout.as_mut().unwrap().flush().unwrap();
     }
 
@@ -91,48 +95,81 @@ impl Ui {
         self.stdout.as_mut().unwrap().flush().unwrap();
     }
 
-    pub fn run(&mut self,tx:Sender<String>) {
-        let stdin = stdin();
+    fn spawn_stdin_channel() -> Receiver<termion::event::Key> {
+        let (tx, rx) = mpsc::channel();
+        thread::spawn(move || {
+            let stdin = stdin();
+            for c in stdin.keys() {
+                tx.send(c.unwrap()).unwrap();
+            }
+        });
+        rx
+    }
+
+    fn deal_new_key(&mut self, c: termion::event::Key) {
+        match c {
+            Key::Char('\n') => {
+                self.cur_pos = 0;
+                let s = self.make_string();
+                self.message(&s);
+                self.out = s.clone();
+                self.buffer.clear();
+            }
+            Key::Char(c) => {
+                if c.is_alphanumeric() {
+                    self.insert(c)
+                }
+            }
+            Key::Left => {
+                if self.cur_pos >= 1 {
+                    self.cur_pos -= 1
+                }
+            }
+            Key::Right => {
+                if self.cur_pos <= self.buffer.len() {
+                    self.cur_pos += 1
+                }
+            }
+            Key::End => self.cur_pos = self.buffer.len(),
+            Key::Home => self.cur_pos = 0,
+            //Key::Up => print!("↑"),
+            //Key::Down => print!("↓"),
+            Key::Backspace => self.delete(),
+            _ => {}
+        }
+    }
+
+    pub fn run(&mut self, tx: Sender<String>) {
         let mut stdout = stdout().into_raw_mode().unwrap();
         stdout.flush().unwrap();
         self.stdout = Some(stdout);
 
         self.message("q to exit. Type stuff, use alt, and so on.");
         self.render();
-        for c in stdin.keys() {
-            match c.unwrap() {
-                Key::Char('\n') => {
-                    self.cur_pos = 0;
-                    let s = self.make_string();
-                    self.message(&s);
-                    self.buffer.clear();
-                    tx.send(s.clone()).unwrap();
-                }
-                Key::Char(c) => {
-                    if c.is_alphanumeric() {
-                        self.insert(c)
+
+        let stdin_channel = Ui::spawn_stdin_channel();
+        loop {
+            let c: termion::event::Key;
+            match stdin_channel.try_recv() {
+                Ok(temp) => {
+                    c = temp;
+                    if c == Key::Ctrl('d') {
+                        break;
                     }
+
+                    self.deal_new_key(c)
                 }
-                Key::Ctrl('d') => {
-                    break;
+                Err(mpsc::TryRecvError::Empty) => {
+                    self.message.push('c');
+                    thread::sleep(time::Duration::from_millis(50));
                 }
-                Key::Left => {
-                    if self.cur_pos >= 1 {
-                        self.cur_pos -= 1
-                    }
-                }
-                Key::Right => {
-                    if self.cur_pos <= self.buffer.len() {
-                        self.cur_pos += 1
-                    }
-                }
-                Key::End => self.cur_pos = self.buffer.len(),
-                Key::Home => self.cur_pos = 0,
-                //Key::Up => print!("↑"),
-                //Key::Down => print!("↓"),
-                Key::Backspace => self.delete(),
-                _ => {}
+                Err(mpsc::TryRecvError::Disconnected) => panic!("Channel disconnected"),
             }
+            if !self.out.is_empty() {
+                tx.send(self.out.clone()).unwrap();
+                self.out.clear();
+            }
+
             self.render();
         }
         self.clear_all();
