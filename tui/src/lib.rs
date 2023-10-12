@@ -20,8 +20,32 @@ impl Frame {
     pub fn from_vec(lines: Vec<String>) -> Self {
         Frame { lines }
     }
+}
 
+struct GridArea {
+    cur_x: u32,
+    cur_y: u32,
+}
+impl GridArea {
+    fn render(&self) -> Frame {
+        let mut lines = Vec::new();
+        for y in (0..8).rev() {
+            lines.push("--------------------------------".to_string());
+            let mut temp = String::new();
+            for x in 0..8 {
+                temp.push_str("|");
+                if x == self.cur_x && y == self.cur_y {
+                    temp.push_str("-> ");
+                } else {
+                    temp.push_str("   ");
+                }
+            }
 
+            temp.push_str("|");
+            lines.push(temp);
+        }
+        return Frame::from_vec(lines);
+    }
 }
 
 pub struct Ui {
@@ -32,6 +56,7 @@ pub struct Ui {
     rx_input: Receiver<Frame>,
     tx_output: Sender<String>,
     frame: Frame,
+    grid_area: GridArea,
     out: String,
 }
 
@@ -48,6 +73,7 @@ impl Ui {
                 out: String::new(),
                 rx_input,
                 tx_output,
+                grid_area: GridArea { cur_x: 0, cur_y: 0 },
                 frame: Frame::one_line_frame("frame"),
             },
             tx_input,
@@ -113,6 +139,18 @@ impl Ui {
             i += 1;
         }
 
+        i = 0;
+        for l in self.grid_area.render().lines.iter() {
+            write!(
+                self.stdout.as_mut().unwrap(),
+                "{}{}",
+                termion::cursor::Goto(1, 15 + i),
+                l,
+            )
+            .unwrap();
+            i += 1;
+        }
+
         let mut i = 0;
         let mut cursor = 0;
         self.move_cursor(1);
@@ -163,15 +201,32 @@ impl Ui {
                 }
             }
             Key::Left => {
+                if self.grid_area.cur_x > 0 {
+                    self.grid_area.cur_x -= 1
+                }
                 if self.cur_pos >= 1 {
                     self.cur_pos -= 1
                 }
             }
             Key::Right => {
+                if self.grid_area.cur_x < 7 {
+                    self.grid_area.cur_x += 1
+                }
                 if self.cur_pos <= self.buffer.len() {
                     self.cur_pos += 1
                 }
             }
+            Key::Up => {
+                if self.grid_area.cur_y < 7 {
+                    self.grid_area.cur_y += 1
+                }
+            }
+            Key::Down => {
+                if self.grid_area.cur_y > 0 {
+                    self.grid_area.cur_y -= 1
+                }
+            }
+
             Key::End => self.cur_pos = self.buffer.len(),
             Key::Home => self.cur_pos = 0,
             //Key::Up => print!("↑"),

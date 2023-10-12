@@ -12,8 +12,8 @@ fn main() {
         if let Ok(temp) = rx.recv_timeout(Duration::from_millis(100)) {
             let mut reply = "i have received".to_string();
             reply.push_str(temp.as_str());
-            //tx.send(Frame::one_line_frame(reply.as_str())).unwrap();
-            tx.send(draw_board()).unwrap();
+            tx.send(Frame::one_line_frame(reply.as_str())).unwrap();
+            //tx.send(draw_board()).unwrap();
             buffer.push_str(temp.as_str())
         }
     }
