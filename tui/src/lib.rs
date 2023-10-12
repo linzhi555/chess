@@ -195,6 +195,11 @@ impl Ui {
                 self.out = s.clone();
                 self.buffer.clear();
             }
+            Key::Char(' ') => {
+                self.insert(' ')
+            }
+
+
             Key::Char(c) => {
                 if c.is_alphanumeric() {
                     self.insert(c)
