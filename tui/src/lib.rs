@@ -1,7 +1,8 @@
+use core::time;
 use std::io::{stdin, stdout, Stdout, Write};
 use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
-use std::{thread, time};
+use std::thread;
 use termion::input::TermRead;
 use termion::raw::IntoRawMode;
 use termion::{event::Key, raw::RawTerminal};
@@ -11,18 +12,28 @@ pub struct Ui {
     buffer: Vec<char>,
     stdout: Option<RawTerminal<Stdout>>,
     message: String,
+    rx_input: Receiver<String>,
+    tx_output: Sender<String>,
     out: String,
 }
 
 impl Ui {
-    pub fn new() -> Self {
-        Ui {
-            cur_pos: 0,
-            buffer: Vec::new(),
-            stdout: None,
-            message: String::new(),
-            out: String::new(),
-        }
+    pub fn new() -> (Self, Sender<String>, Receiver<String>) {
+        let (tx_input, rx_input) = mpsc::channel();
+        let (tx_output, rx_output) = mpsc::channel();
+        (
+            Ui {
+                cur_pos: 0,
+                buffer: Vec::new(),
+                stdout: None,
+                message: String::new(),
+                out: String::new(),
+                rx_input,
+                tx_output,
+            },
+            tx_input,
+            rx_output,
+        )
     }
 
     fn make_string(&self) -> String {
@@ -139,7 +150,7 @@ impl Ui {
         }
     }
 
-    pub fn run(&mut self, tx: Sender<String>) {
+    pub fn run(&mut self) {
         let mut stdout = stdout().into_raw_mode().unwrap();
         stdout.flush().unwrap();
         self.stdout = Some(stdout);
@@ -159,18 +170,23 @@ impl Ui {
 
                     self.deal_new_key(c)
                 }
-                Err(mpsc::TryRecvError::Empty) => {
-                    self.message.push('c');
-                    thread::sleep(time::Duration::from_millis(50));
-                }
+                Err(mpsc::TryRecvError::Empty) => {}
                 Err(mpsc::TryRecvError::Disconnected) => panic!("Channel disconnected"),
             }
+
+            match self.rx_input.try_recv() {
+                Ok(temp) => self.message = temp,
+                Err(mpsc::TryRecvError::Empty) => {}
+                Err(mpsc::TryRecvError::Disconnected) => panic!("Channel disconnected"),
+            }
+
             if !self.out.is_empty() {
-                tx.send(self.out.clone()).unwrap();
+                self.tx_output.send(self.out.clone()).unwrap();
                 self.out.clear();
             }
 
             self.render();
+            thread::sleep(time::Duration::from_millis(1))
         }
         self.clear_all();
     }
