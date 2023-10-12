@@ -7,18 +7,36 @@ use termion::input::TermRead;
 use termion::raw::IntoRawMode;
 use termion::{event::Key, raw::RawTerminal};
 
+pub struct Frame {
+    lines: Vec<String>,
+}
+impl Frame {
+    pub fn one_line_frame(s: &str) -> Self {
+        let mut lines = Vec::new();
+        lines.push(s.to_string());
+        Frame { lines }
+    }
+
+    pub fn from_vec(lines: Vec<String>) -> Self {
+        Frame { lines }
+    }
+
+
+}
+
 pub struct Ui {
     cur_pos: usize,
     buffer: Vec<char>,
     stdout: Option<RawTerminal<Stdout>>,
     message: String,
-    rx_input: Receiver<String>,
+    rx_input: Receiver<Frame>,
     tx_output: Sender<String>,
+    frame: Frame,
     out: String,
 }
 
 impl Ui {
-    pub fn new() -> (Self, Sender<String>, Receiver<String>) {
+    pub fn new() -> (Self, Sender<Frame>, Receiver<String>) {
         let (tx_input, rx_input) = mpsc::channel();
         let (tx_output, rx_output) = mpsc::channel();
         (
@@ -30,6 +48,7 @@ impl Ui {
                 out: String::new(),
                 rx_input,
                 tx_output,
+                frame: Frame::one_line_frame("frame"),
             },
             tx_input,
             rx_output,
@@ -81,6 +100,18 @@ impl Ui {
             self.message,
         )
         .unwrap();
+
+        let mut i = 0;
+        for l in self.frame.lines.iter() {
+            write!(
+                self.stdout.as_mut().unwrap(),
+                "{}{}",
+                termion::cursor::Goto(1, 5 + i),
+                l,
+            )
+            .unwrap();
+            i += 1;
+        }
 
         let mut i = 0;
         let mut cursor = 0;
@@ -175,7 +206,7 @@ impl Ui {
             }
 
             match self.rx_input.try_recv() {
-                Ok(temp) => self.message = temp,
+                Ok(temp) => self.frame = temp,
                 Err(mpsc::TryRecvError::Empty) => {}
                 Err(mpsc::TryRecvError::Disconnected) => panic!("Channel disconnected"),
             }
