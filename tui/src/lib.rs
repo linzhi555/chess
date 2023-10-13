@@ -6,6 +6,7 @@ use std::thread;
 use termion::input::TermRead;
 use termion::raw::IntoRawMode;
 use termion::{event::Key, raw::RawTerminal};
+use chess_core::Game;
 
 pub struct Frame {
     lines: Vec<String>,
@@ -25,10 +26,17 @@ impl Frame {
 struct GridArea {
     cur_x: u32,
     cur_y: u32,
+    gameInfo:String,
 }
 impl GridArea {
     fn render(&self) -> Frame {
         let mut lines = Vec::new();
+        if self.gameInfo.is_empty(){
+            return Frame::from_vec(lines);
+        }
+
+        let game = Game::from_str(self.gameInfo.as_str()).unwrap();
+
         for y in (0..8).rev() {
             lines.push("--------------------------------".to_string());
             let mut temp = String::new();
@@ -37,8 +45,14 @@ impl GridArea {
                 if x == self.cur_x && y == self.cur_y {
                     temp.push_str("-> ");
                 } else {
-                    temp.push_str("   ");
+
+                    if let Some(x) = game.get_piece(x, y){
+                        temp.push_str(x.as_str());
+                    }else{
+                        temp.push_str("   ");
+                    }
                 }
+
             }
 
             temp.push_str("|");
@@ -72,7 +86,7 @@ impl Ui {
                 out: String::new(),
                 rx_input,
                 tx_output,
-                grid_area: GridArea { cur_x: 0, cur_y: 0 },
+                grid_area: GridArea { cur_x: 0, cur_y: 0,gameInfo:String::new() },
             },
             tx_input,
             rx_output,
@@ -253,7 +267,11 @@ impl Ui {
             }
 
             match self.rx_input.try_recv() {
-                Ok(temp) => self.message = temp,
+                Ok(temp) => {
+                    self.message = temp.clone();
+                    self.grid_area.gameInfo=temp;
+                }
+
                 Err(mpsc::TryRecvError::Empty) => {}
                 Err(mpsc::TryRecvError::Disconnected) => panic!("Channel disconnected"),
             }

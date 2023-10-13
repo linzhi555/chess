@@ -3,12 +3,13 @@ use std::time::Duration;
 use tui::{Ui,Frame};
 use lexer;
 use lexer::{Lexer,Token};
+use chess_core::Game;
 fn main() {
     let (mut ui, tx, rx) = Ui::new();
     let handle = thread::spawn(move || {
         ui.run();
     });
-
+    let game = Game::new();
     let mut buffer = String::new();
     while !handle.is_finished() {
         if let Ok(temp) = rx.recv_timeout(Duration::from_millis(100)) {
@@ -16,12 +17,14 @@ fn main() {
             let tokens = lexer::Lexer::to_token_vec(temp.as_str());
             let tokens_str = format!("{:?}",tokens);
             reply.push_str(tokens_str.as_str());
-            tx.send(reply).unwrap();
+            reply.push_str(game.to_str().as_str());
+            //tx.send(reply).unwrap();
+            tx.send(game.to_str()).unwrap();
             //tx.send(draw_board()).unwrap();
             buffer.push_str(temp.as_str())
         }
     }
-    println!("the result is {}", buffer)
+    println!("sub process exited the result is {}", buffer)
 }
 
 fn draw_board() -> Frame{

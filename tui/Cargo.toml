@@ -7,4 +7,5 @@ edition = "2021"
 
 [dependencies]
 lexer={path="../lexer"}
+chess-core={path="../chess-core"}
 termion = "2.0.1"
