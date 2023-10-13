@@ -1,11 +1,16 @@
 use lexer::{Lexer, Token};
 use std::io::{self, BufRead};
+use serde::{Deserialize, Serialize};
+use serde_json;
+
+#[derive(Serialize, Deserialize)]
 #[derive(Debug, Clone)]
 struct Vec2 {
     x: i32,
     y: i32,
 }
 
+#[derive(Serialize, Deserialize)]
 #[derive(Debug, Clone)]
 struct Pawn {
     pos: Vec2,
@@ -20,6 +25,7 @@ impl Pawn {
     }
 }
 
+#[derive(Serialize, Deserialize)]
 #[derive(Debug, Clone)]
 struct King {
     pos: Vec2,
@@ -34,6 +40,7 @@ impl King {
     }
 }
 
+#[derive(Serialize, Deserialize)]
 #[derive(Debug, Clone)]
 enum Piece {
     Pawn(Pawn),
@@ -41,6 +48,7 @@ enum Piece {
     None,
 }
 
+#[derive(Serialize, Deserialize)]
 #[derive(Debug, Clone)]
 enum Stage {
     WhiteTurn,
@@ -51,6 +59,7 @@ enum Stage {
     BlackWin,
 }
 
+#[derive(Serialize, Deserialize)]
 #[derive(Debug, Clone)]
 struct Game {
     stage: Stage,
@@ -71,6 +80,21 @@ impl Game {
     fn pre_check(&mut self, c: &Cmd) -> bool {
         true
     }
+
+    fn from_str(s: &str) -> Result<Self,()>{
+        let res:serde_json::Result<Game>=serde_json::from_str(s);
+        if let Ok(b) = res{
+            Ok(b)
+        }else{
+            Err(())
+        }
+    }
+
+    fn to_str(&self) -> String{
+        let s = serde_json::to_string(self).unwrap();
+        s
+    }
+
 
     fn after_check(&mut self, c: &Cmd) -> bool {
         true
@@ -140,6 +164,9 @@ enum Cmd {
 
 fn main() {
     let mut game = Game::new();
+    println!("{}",game.to_str());
+
+
     println!("{:?}", game);
     let mut i = -1;
     loop {

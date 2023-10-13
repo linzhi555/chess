@@ -3,10 +3,18 @@ use serde_json::Result;
 
 #[derive(Serialize, Deserialize)]
 #[derive(Debug)]
+enum Team {
+    Black,
+    White,
+    Other(i32)
+}
+
+#[derive(Serialize, Deserialize)]
+#[derive(Debug)]
 struct Node {
     x:u8,
     y:u8,
-    team:String,
+    team:Team,
     s:String,
 }
 
@@ -24,14 +32,14 @@ impl Board{
         nodes.push(Node{
         x:1,
         y:1,
-        team:"white".to_string(),
+        team:Team::White,
         s:"white".to_string(),
         });
 
         nodes.push(Node{
         x:1,
         y:3,
-        team:"black".to_string(),
+        team:Team::Other(11),
         s:"black".to_string(),
         });
 
