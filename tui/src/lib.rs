@@ -53,15 +53,14 @@ pub struct Ui {
     buffer: Vec<char>,
     stdout: Option<RawTerminal<Stdout>>,
     message: String,
-    rx_input: Receiver<Frame>,
+    rx_input: Receiver<String>,
     tx_output: Sender<String>,
-    frame: Frame,
     grid_area: GridArea,
     out: String,
 }
 
 impl Ui {
-    pub fn new() -> (Self, Sender<Frame>, Receiver<String>) {
+    pub fn new() -> (Self, Sender<String>, Receiver<String>) {
         let (tx_input, rx_input) = mpsc::channel();
         let (tx_output, rx_output) = mpsc::channel();
         (
@@ -74,7 +73,6 @@ impl Ui {
                 rx_input,
                 tx_output,
                 grid_area: GridArea { cur_x: 0, cur_y: 0 },
-                frame: Frame::one_line_frame("frame"),
             },
             tx_input,
             rx_output,
@@ -127,19 +125,8 @@ impl Ui {
         )
         .unwrap();
 
-        let mut i = 0;
-        for l in self.frame.lines.iter() {
-            write!(
-                self.stdout.as_mut().unwrap(),
-                "{}{}",
-                termion::cursor::Goto(1, 5 + i),
-                l,
-            )
-            .unwrap();
-            i += 1;
-        }
 
-        i = 0;
+        let mut i = 0;
         for l in self.grid_area.render().lines.iter() {
             write!(
                 self.stdout.as_mut().unwrap(),
@@ -266,7 +253,7 @@ impl Ui {
             }
 
             match self.rx_input.try_recv() {
-                Ok(temp) => self.frame = temp,
+                Ok(temp) => self.message = temp,
                 Err(mpsc::TryRecvError::Empty) => {}
                 Err(mpsc::TryRecvError::Disconnected) => panic!("Channel disconnected"),
             }

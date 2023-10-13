@@ -1,7 +1,8 @@
 use std::thread;
 use std::time::Duration;
 use tui::{Ui,Frame};
-use lexer::Lexer;
+use lexer;
+use lexer::{Lexer,Token};
 fn main() {
     let (mut ui, tx, rx) = Ui::new();
     let handle = thread::spawn(move || {
@@ -12,10 +13,10 @@ fn main() {
     while !handle.is_finished() {
         if let Ok(temp) = rx.recv_timeout(Duration::from_millis(100)) {
             let mut reply = "the parse res".to_string();
-            let tokens = Lexer::to_token_vec(temp.as_str());
+            let tokens = lexer::Lexer::to_token_vec(temp.as_str());
             let tokens_str = format!("{:?}",tokens);
             reply.push_str(tokens_str.as_str());
-            tx.send(Frame::one_line_frame(reply.as_str())).unwrap();
+            tx.send(reply).unwrap();
             //tx.send(draw_board()).unwrap();
             buffer.push_str(temp.as_str())
         }
