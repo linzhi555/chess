@@ -1,8 +1,7 @@
-use chess_core::Game;
 use core::time;
 use std::io::{stdin, stdout, Stdout, Write};
 use std::sync::mpsc;
-use std::sync::mpsc::{Receiver, Sender};
+use std::sync::mpsc::Receiver;
 use std::thread;
 use termion::input::TermRead;
 use termion::raw::IntoRawMode;
@@ -26,7 +25,6 @@ impl Frame {
 struct GridArea {
     cur_x: u32,
     cur_y: u32,
-    gameInfo: String,
 }
 impl GridArea {
     fn deal_new_key(&mut self, c: termion::event::Key) -> String {
@@ -176,24 +174,18 @@ pub struct Ui {
     focus: UiFocus,
     grid_area: GridArea,
     input_area: InputArea,
+
     message: String,
     stdout: Option<RawTerminal<Stdout>>,
-    rx_input: Receiver<String>,
-    tx_output: Sender<String>,
-    out: String,
 }
 
 impl Ui {
-    pub fn new() -> (Self, Sender<String>, Receiver<String>) {
-        let (tx_input, rx_input) = mpsc::channel();
-        let (tx_output, rx_output) = mpsc::channel();
-        (
+    pub fn new() -> Self {
             Ui {
                 focus: UiFocus::InputArea,
                 grid_area: GridArea {
                     cur_x: 0,
                     cur_y: 0,
-                    gameInfo: String::new(),
                 },
                 input_area: InputArea {
                     cur_pos: 0,
@@ -201,22 +193,7 @@ impl Ui {
                 },
                 message: String::new(),
                 stdout: None,
-                out: String::new(),
-                rx_input,
-                tx_output,
-            },
-            tx_input,
-            rx_output,
-        )
-    }
-
-    fn move_cursor(&mut self, i: u16) {
-        write!(
-            self.stdout.as_mut().unwrap(),
-            "{}",
-            termion::cursor::Goto(i, 1)
-        )
-        .unwrap();
+            }
     }
 
     fn message(&mut self, s: &str) {
@@ -345,20 +322,6 @@ impl Ui {
                 Err(mpsc::TryRecvError::Disconnected) => panic!("Channel disconnected"),
             }
 
-            match self.rx_input.try_recv() {
-                Ok(temp) => {
-                    self.message = temp.clone();
-                    self.grid_area.gameInfo = temp;
-                }
-
-                Err(mpsc::TryRecvError::Empty) => {}
-                Err(mpsc::TryRecvError::Disconnected) => panic!("Channel disconnected"),
-            }
-
-            if !self.out.is_empty() {
-                self.tx_output.send(self.out.clone()).unwrap();
-                self.out.clear();
-            }
 
             self.render();
             thread::sleep(time::Duration::from_millis(1))
