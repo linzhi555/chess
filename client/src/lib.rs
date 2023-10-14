@@ -1,3 +1,4 @@
+use chess_core::Game;
 use core::time;
 use std::io::{stdin, stdout, Stdout, Write};
 use std::sync::mpsc;
@@ -6,7 +7,6 @@ use std::thread;
 use termion::input::TermRead;
 use termion::raw::IntoRawMode;
 use termion::{event::Key, raw::RawTerminal};
-use chess_core::Game;
 
 pub struct Frame {
     lines: Vec<String>,
@@ -26,21 +26,21 @@ impl Frame {
 struct GridArea {
     cur_x: u32,
     cur_y: u32,
-    gameInfo:String,
+    gameInfo: String,
 }
 impl GridArea {
     fn deal_new_key(&mut self, c: termion::event::Key) {
         match c {
-                Key::Left => {
+            Key::Left => {
                 if self.cur_x > 0 {
                     self.cur_x -= 1
                 }
-                }
+            }
             Key::Right => {
                 if self.cur_x < 7 {
                     self.cur_x += 1
                 }
-                }
+            }
             Key::Up => {
                 if self.cur_y < 7 {
                     self.cur_y += 1
@@ -52,14 +52,9 @@ impl GridArea {
                 }
             }
 
-                _ => {}
+            _ => {}
         }
     }
-
-
-
-
-
 
     fn render(&self) -> Frame {
         let mut lines = Vec::new();
@@ -72,9 +67,8 @@ impl GridArea {
                 if x == self.cur_x && y == self.cur_y {
                     temp.push_str("-> ");
                 } else {
-                        temp.push_str("   ");
+                    temp.push_str("   ");
                 }
-
             }
 
             temp.push_str("|");
@@ -111,27 +105,25 @@ impl InputArea {
 
     fn render(&mut self) -> Frame {
         let mut lines = Vec::new();
-        let mut temp  = String::new();
+        let mut temp = String::new();
         temp.push_str("> ");
         for c in self.buffer.iter() {
             temp.push(*c)
         }
         lines.push(temp);
         return Frame::from_vec(lines);
-
     }
 
-    fn deal_new_key(&mut self, c: termion::event::Key) {
+    fn deal_new_key(&mut self, c: termion::event::Key) -> String {
+        let mut res = String::new();
         match c {
             Key::Char('\n') => {
                 self.cur_pos = 0;
                 let s = self.make_string();
+                res = s;
                 self.buffer.clear();
             }
-            Key::Char(' ') => {
-                self.insert(' ')
-            }
-
+            Key::Char(' ') => self.insert(' '),
 
             Key::Char(c) => {
                 if c.is_alphanumeric() {
@@ -156,32 +148,26 @@ impl InputArea {
             Key::Backspace => self.delete(),
             _ => {}
         }
+        res
     }
-
-
-
 }
 
-
-enum UiFocus{
+enum UiFocus {
     GridArea,
     InputArea,
 }
 
-impl UiFocus{
-    fn switch(&mut self){
-        match self{
-            UiFocus::InputArea=>
-                *self=UiFocus::GridArea,
-            UiFocus::GridArea =>
-                *self=UiFocus::InputArea,
+impl UiFocus {
+    fn switch(&mut self) {
+        match self {
+            UiFocus::InputArea => *self = UiFocus::GridArea,
+            UiFocus::GridArea => *self = UiFocus::InputArea,
         }
     }
 }
 
-
 pub struct Ui {
-    focus : UiFocus,
+    focus: UiFocus,
     grid_area: GridArea,
     input_area: InputArea,
     message: String,
@@ -197,9 +183,16 @@ impl Ui {
         let (tx_output, rx_output) = mpsc::channel();
         (
             Ui {
-                focus:UiFocus::InputArea,
-                grid_area: GridArea { cur_x: 0, cur_y: 0,gameInfo:String::new() },
-                input_area: InputArea{ cur_pos:0, buffer:Vec::new()},
+                focus: UiFocus::InputArea,
+                grid_area: GridArea {
+                    cur_x: 0,
+                    cur_y: 0,
+                    gameInfo: String::new(),
+                },
+                input_area: InputArea {
+                    cur_pos: 0,
+                    buffer: Vec::new(),
+                },
                 message: String::new(),
                 stdout: None,
                 out: String::new(),
@@ -211,7 +204,6 @@ impl Ui {
         )
     }
 
-
     fn move_cursor(&mut self, i: u16) {
         write!(
             self.stdout.as_mut().unwrap(),
@@ -220,7 +212,6 @@ impl Ui {
         )
         .unwrap();
     }
-
 
     fn message(&mut self, s: &str) {
         self.message = s.to_string()
@@ -252,7 +243,6 @@ impl Ui {
             i += 1;
         }
 
-
         let mut i = 0;
         for l in self.input_area.render().lines.iter() {
             write!(
@@ -265,12 +255,12 @@ impl Ui {
             i += 1;
         }
 
-           write!(
-                self.stdout.as_mut().unwrap(),
-                "{}",
-                termion::cursor::Goto(self.input_area.cur_pos as u16 +3, 2 ),
-            ).unwrap();
-
+        write!(
+            self.stdout.as_mut().unwrap(),
+            "{}",
+            termion::cursor::Goto(self.input_area.cur_pos as u16 + 3, 2),
+        )
+        .unwrap();
 
         self.stdout.as_mut().unwrap().flush().unwrap();
     }
@@ -285,7 +275,6 @@ impl Ui {
         });
         rx
     }
-
 
     pub fn run(&mut self) {
         let mut stdout = stdout().into_raw_mode().unwrap();
@@ -306,17 +295,16 @@ impl Ui {
                     }
 
                     if c == Key::Char('\t') {
-
                         self.focus.switch();
                         continue;
                     }
 
-
-                    match self.focus{
-                        UiFocus::InputArea =>
-                            self.input_area.deal_new_key(c),
-                        UiFocus::GridArea =>
-                            self.grid_area.deal_new_key(c),
+                    match self.focus {
+                        UiFocus::InputArea => {
+                            let m = self.input_area.deal_new_key(c);
+                            self.message = m;
+                        }
+                        UiFocus::GridArea => self.grid_area.deal_new_key(c),
                     }
                 }
                 Err(mpsc::TryRecvError::Empty) => {}
@@ -326,8 +314,7 @@ impl Ui {
             match self.rx_input.try_recv() {
                 Ok(temp) => {
                     self.message = temp.clone();
-                    self.grid_area.gameInfo=temp;
-
+                    self.grid_area.gameInfo = temp;
                 }
 
                 Err(mpsc::TryRecvError::Empty) => {}
