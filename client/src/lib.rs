@@ -29,8 +29,13 @@ struct GridArea {
     gameInfo: String,
 }
 impl GridArea {
-    fn deal_new_key(&mut self, c: termion::event::Key) {
+    fn deal_new_key(&mut self, c: termion::event::Key) -> String {
+        let mut res = String::new();
         match c {
+            Key::Char('\n') => {
+                res = format!("{} {}", self.cur_x, self.cur_y);
+            }
+
             Key::Left => {
                 if self.cur_x > 0 {
                     self.cur_x -= 1
@@ -54,6 +59,7 @@ impl GridArea {
 
             _ => {}
         }
+        res
     }
 
     fn render(&self) -> Frame {
@@ -224,10 +230,8 @@ impl Ui {
     fn render(&mut self) {
         write!(
             self.stdout.as_mut().unwrap(),
-            "{}{}{}",
+            "{}",
             termion::clear::All,
-            termion::cursor::Goto(1, 3),
-            self.message,
         )
         .unwrap();
 
@@ -236,7 +240,7 @@ impl Ui {
             write!(
                 self.stdout.as_mut().unwrap(),
                 "{}{}",
-                termion::cursor::Goto(1, 15 + i),
+                termion::cursor::Goto(1, 6 + i),
                 l,
             )
             .unwrap();
@@ -248,17 +252,44 @@ impl Ui {
             write!(
                 self.stdout.as_mut().unwrap(),
                 "{}{}",
-                termion::cursor::Goto(1, 2 + i),
+                termion::cursor::Goto(1, 3 + i),
                 l,
             )
             .unwrap();
             i += 1;
         }
 
+        match self.focus {
+            UiFocus::InputArea => {
+                write!(
+                    self.stdout.as_mut().unwrap(),
+                    "{}===>",
+                    termion::cursor::Goto(1, 1),
+                )
+                .unwrap();
+            }
+            UiFocus::GridArea => write!(
+                self.stdout.as_mut().unwrap(),
+                "{}===>",
+                termion::cursor::Goto(1, 5),
+            )
+            .unwrap(),
+        }
+
+
+        write!(
+            self.stdout.as_mut().unwrap(),
+            "{}{}",
+            termion::cursor::Goto(1, 30),
+            self.message,
+        )
+        .unwrap();
+
+
         write!(
             self.stdout.as_mut().unwrap(),
             "{}",
-            termion::cursor::Goto(self.input_area.cur_pos as u16 + 3, 2),
+            termion::cursor::Goto(self.input_area.cur_pos as u16 + 3, 3),
         )
         .unwrap();
 
@@ -304,7 +335,10 @@ impl Ui {
                             let m = self.input_area.deal_new_key(c);
                             self.message = m;
                         }
-                        UiFocus::GridArea => self.grid_area.deal_new_key(c),
+                        UiFocus::GridArea => {
+                            let m = self.grid_area.deal_new_key(c);
+                            self.message = m;
+                        }
                     }
                 }
                 Err(mpsc::TryRecvError::Empty) => {}
