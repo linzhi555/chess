@@ -127,10 +127,8 @@ impl InputArea {
                 res = s;
                 self.buffer.clear();
             }
-            Key::Char(' ') => self.insert(' '),
-
             Key::Char(c) => {
-                if c.is_alphanumeric() {
+                if !c.is_control() {
                     self.insert(c)
                 }
             }
@@ -174,35 +172,30 @@ pub struct Ui {
     focus: UiFocus,
     grid_area: GridArea,
     input_area: InputArea,
-    event_handle: Box<dyn FnMut(&str,&mut String)>,
+    event_handle: Box<dyn FnMut(&str, &mut String)>,
     message: String,
     stdout: Option<RawTerminal<Stdout>>,
 }
 
-fn default_handle(s:&str,message:&mut String){
+fn default_handle(s: &str, message: &mut String) {
     message.clear();
     message.push_str("dafault handle");
     message.push_str(s);
 }
 
-
-
 impl Ui {
-    pub fn new(deal_func: Box<dyn FnMut(&str,&mut String)>)  -> Self{
-            Ui {
-                focus: UiFocus::InputArea,
-                grid_area: GridArea {
-                    cur_x: 0,
-                    cur_y: 0,
-                },
-                input_area: InputArea {
-                    cur_pos: 0,
-                    buffer: Vec::new(),
-                },
-                event_handle:deal_func,
-                message: String::new(),
-                stdout: None,
-            }
+    pub fn new(deal_func: Box<dyn FnMut(&str, &mut String)>) -> Self {
+        Ui {
+            focus: UiFocus::InputArea,
+            grid_area: GridArea { cur_x: 0, cur_y: 0 },
+            input_area: InputArea {
+                cur_pos: 0,
+                buffer: Vec::new(),
+            },
+            event_handle: deal_func,
+            message: String::new(),
+            stdout: None,
+        }
     }
 
     fn message(&mut self, s: &str) {
@@ -214,12 +207,7 @@ impl Ui {
     }
 
     fn render(&mut self) {
-        write!(
-            self.stdout.as_mut().unwrap(),
-            "{}",
-            termion::clear::All,
-        )
-        .unwrap();
+        write!(self.stdout.as_mut().unwrap(), "{}", termion::clear::All,).unwrap();
 
         let mut i = 0;
         for l in self.grid_area.render().lines.iter() {
@@ -262,7 +250,6 @@ impl Ui {
             .unwrap(),
         }
 
-
         write!(
             self.stdout.as_mut().unwrap(),
             "{}{}",
@@ -270,7 +257,6 @@ impl Ui {
             self.message,
         )
         .unwrap();
-
 
         write!(
             self.stdout.as_mut().unwrap(),
@@ -319,18 +305,17 @@ impl Ui {
                     match self.focus {
                         UiFocus::InputArea => {
                             let m = self.input_area.deal_new_key(c);
-                            (*self.event_handle)(m.as_str(),&mut self.message)
+                            (*self.event_handle)(m.as_str(), &mut self.message)
                         }
                         UiFocus::GridArea => {
                             let m = self.grid_area.deal_new_key(c);
-                            self.message = m;
+                            (*self.event_handle)(m.as_str(), &mut self.message)
                         }
                     }
                 }
                 Err(mpsc::TryRecvError::Empty) => {}
                 Err(mpsc::TryRecvError::Disconnected) => panic!("Channel disconnected"),
             }
-
 
             self.render();
             thread::sleep(time::Duration::from_millis(1))
