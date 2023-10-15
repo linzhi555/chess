@@ -22,16 +22,21 @@ impl Frame {
     }
 }
 
-struct GridArea {
+pub enum Event {
+    StringInput(String),
+    GridClick(u32, u32),
+}
+
+pub struct GridArea {
     cur_x: u32,
     cur_y: u32,
 }
 impl GridArea {
-    fn deal_new_key(&mut self, c: termion::event::Key) -> String {
-        let mut res = String::new();
+    fn deal_new_key(&mut self, c: termion::event::Key) -> Option<Event> {
+        let mut res: Option<Event> = None;
         match c {
             Key::Char('\n') => {
-                res = format!("{} {}", self.cur_x, self.cur_y);
+                res = Some(Event::GridClick(self.cur_x, self.cur_y));
             }
 
             Key::Left => {
@@ -82,7 +87,7 @@ impl GridArea {
     }
 }
 
-struct InputArea {
+pub struct InputArea {
     cur_pos: usize,
     buffer: Vec<char>,
 }
@@ -118,13 +123,13 @@ impl InputArea {
         return Frame::from_vec(lines);
     }
 
-    fn deal_new_key(&mut self, c: termion::event::Key) -> String {
-        let mut res = String::new();
+    fn deal_new_key(&mut self, c: termion::event::Key) -> Option<Event> {
+        let mut res = None;
         match c {
             Key::Char('\n') => {
                 self.cur_pos = 0;
                 let s = self.make_string();
-                res = s;
+                res = Some(Event::StringInput(s));
                 self.buffer.clear();
             }
             Key::Char(c) => {
@@ -168,38 +173,39 @@ impl UiFocus {
     }
 }
 
+pub struct Areas {
+    pub input_area: InputArea,
+    pub grid_area: GridArea,
+    pub message: String,
+}
+
 pub struct Ui {
     focus: UiFocus,
-    grid_area: GridArea,
-    input_area: InputArea,
-    event_handle: Box<dyn FnMut(&str, &mut String)>,
-    message: String,
+    areas: Areas,
+    event_handle: Box<dyn FnMut(Event, &mut Areas)>,
     stdout: Option<RawTerminal<Stdout>>,
 }
 
-fn default_handle(s: &str, message: &mut String) {
-    message.clear();
-    message.push_str("dafault handle");
-    message.push_str(s);
-}
-
 impl Ui {
-    pub fn new(deal_func: Box<dyn FnMut(&str, &mut String)>) -> Self {
+    pub fn new(deal_func: Box<dyn FnMut(Event, &mut Areas)>) -> Self {
         Ui {
             focus: UiFocus::InputArea,
-            grid_area: GridArea { cur_x: 0, cur_y: 0 },
-            input_area: InputArea {
-                cur_pos: 0,
-                buffer: Vec::new(),
+            areas: Areas {
+                grid_area: GridArea { cur_x: 0, cur_y: 0 },
+                input_area: InputArea {
+                    cur_pos: 0,
+                    buffer: Vec::new(),
+                },
+
+                message: String::new(),
             },
             event_handle: deal_func,
-            message: String::new(),
             stdout: None,
         }
     }
 
     fn message(&mut self, s: &str) {
-        self.message = s.to_string()
+        self.areas.message = s.to_string()
     }
     fn clear_all(&mut self) {
         write!(self.stdout.as_mut().unwrap(), "{}", termion::clear::All,).unwrap();
@@ -210,7 +216,7 @@ impl Ui {
         write!(self.stdout.as_mut().unwrap(), "{}", termion::clear::All,).unwrap();
 
         let mut i = 0;
-        for l in self.grid_area.render().lines.iter() {
+        for l in self.areas.grid_area.render().lines.iter() {
             write!(
                 self.stdout.as_mut().unwrap(),
                 "{}{}",
@@ -222,7 +228,7 @@ impl Ui {
         }
 
         let mut i = 0;
-        for l in self.input_area.render().lines.iter() {
+        for l in self.areas.input_area.render().lines.iter() {
             write!(
                 self.stdout.as_mut().unwrap(),
                 "{}{}",
@@ -254,14 +260,14 @@ impl Ui {
             self.stdout.as_mut().unwrap(),
             "{}{}",
             termion::cursor::Goto(1, 30),
-            self.message,
+            self.areas.message,
         )
         .unwrap();
 
         write!(
             self.stdout.as_mut().unwrap(),
             "{}",
-            termion::cursor::Goto(self.input_area.cur_pos as u16 + 3, 3),
+            termion::cursor::Goto(self.areas.input_area.cur_pos as u16 + 3, 3),
         )
         .unwrap();
 
@@ -302,15 +308,19 @@ impl Ui {
                         continue;
                     }
 
+                    let event: Option<Event>;
+
                     match self.focus {
                         UiFocus::InputArea => {
-                            let m = self.input_area.deal_new_key(c);
-                            (*self.event_handle)(m.as_str(), &mut self.message)
+                            event = self.areas.input_area.deal_new_key(c);
                         }
                         UiFocus::GridArea => {
-                            let m = self.grid_area.deal_new_key(c);
-                            (*self.event_handle)(m.as_str(), &mut self.message)
+                            event = self.areas.grid_area.deal_new_key(c);
                         }
+                    };
+
+                    if event.is_some() {
+                        (*self.event_handle)(event.unwrap(), &mut self.areas)
                     }
                 }
                 Err(mpsc::TryRecvError::Empty) => {}
