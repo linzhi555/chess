@@ -1,12 +1,11 @@
 use core::time;
 use std::io::{stdin, stdout, Stdout, Write};
 use std::sync::mpsc;
-use std::sync::mpsc::{Receiver, Sender};
+use std::sync::mpsc::Receiver;
 use std::thread;
 use termion::input::TermRead;
 use termion::raw::IntoRawMode;
 use termion::{event::Key, raw::RawTerminal};
-use chess_core::Game;
 
 pub struct Frame {
     lines: Vec<String>,
@@ -23,19 +22,51 @@ impl Frame {
     }
 }
 
-struct GridArea {
+pub enum Event {
+    StringInput(String),
+    GridClick(u32, u32),
+}
+
+pub struct GridArea {
     cur_x: u32,
     cur_y: u32,
-    gameInfo:String,
 }
 impl GridArea {
+    fn deal_new_key(&mut self, c: termion::event::Key) -> Option<Event> {
+        let mut res: Option<Event> = None;
+        match c {
+            Key::Char('\n') => {
+                res = Some(Event::GridClick(self.cur_x, self.cur_y));
+            }
+
+            Key::Left => {
+                if self.cur_x > 0 {
+                    self.cur_x -= 1
+                }
+            }
+            Key::Right => {
+                if self.cur_x < 7 {
+                    self.cur_x += 1
+                }
+            }
+            Key::Up => {
+                if self.cur_y < 7 {
+                    self.cur_y += 1
+                }
+            }
+            Key::Down => {
+                if self.cur_y > 0 {
+                    self.cur_y -= 1
+                }
+            }
+
+            _ => {}
+        }
+        res
+    }
+
     fn render(&self) -> Frame {
         let mut lines = Vec::new();
-        if self.gameInfo.is_empty(){
-            return Frame::from_vec(lines);
-        }
-
-        let game = Game::from_str(self.gameInfo.as_str()).unwrap();
 
         for y in (0..8).rev() {
             lines.push("--------------------------------".to_string());
@@ -45,14 +76,8 @@ impl GridArea {
                 if x == self.cur_x && y == self.cur_y {
                     temp.push_str("-> ");
                 } else {
-
-                    if let Some(x) = game.get_piece(x, y){
-                        temp.push_str(x.as_str());
-                    }else{
-                        temp.push_str("   ");
-                    }
+                    temp.push_str("   ");
                 }
-
             }
 
             temp.push_str("|");
@@ -62,37 +87,11 @@ impl GridArea {
     }
 }
 
-pub struct Ui {
+pub struct InputArea {
     cur_pos: usize,
     buffer: Vec<char>,
-    stdout: Option<RawTerminal<Stdout>>,
-    message: String,
-    rx_input: Receiver<String>,
-    tx_output: Sender<String>,
-    grid_area: GridArea,
-    out: String,
 }
-
-impl Ui {
-    pub fn new() -> (Self, Sender<String>, Receiver<String>) {
-        let (tx_input, rx_input) = mpsc::channel();
-        let (tx_output, rx_output) = mpsc::channel();
-        (
-            Ui {
-                cur_pos: 0,
-                buffer: Vec::new(),
-                stdout: None,
-                message: String::new(),
-                out: String::new(),
-                rx_input,
-                tx_output,
-                grid_area: GridArea { cur_x: 0, cur_y: 0,gameInfo:String::new() },
-            },
-            tx_input,
-            rx_output,
-        )
-    }
-
+impl InputArea {
     fn make_string(&self) -> String {
         let mut s = String::new();
         for c in self.buffer.iter() {
@@ -101,19 +100,11 @@ impl Ui {
         s
     }
 
-    fn move_cursor(&mut self, i: u16) {
-        write!(
-            self.stdout.as_mut().unwrap(),
-            "{}",
-            termion::cursor::Goto(i, 1)
-        )
-        .unwrap();
-    }
-
     fn insert(&mut self, c: char) {
         self.buffer.insert(self.cur_pos, c);
         self.cur_pos += 1;
     }
+
     fn delete(&mut self) {
         if self.cur_pos >= 1 {
             self.cur_pos -= 1;
@@ -121,8 +112,100 @@ impl Ui {
         }
     }
 
+    fn render(&mut self) -> Frame {
+        let mut lines = Vec::new();
+        let mut temp = String::new();
+        temp.push_str("> ");
+        for c in self.buffer.iter() {
+            temp.push(*c)
+        }
+        lines.push(temp);
+        return Frame::from_vec(lines);
+    }
+
+    fn deal_new_key(&mut self, c: termion::event::Key) -> Option<Event> {
+        let mut res = None;
+        match c {
+            Key::Char('\n') => {
+                self.cur_pos = 0;
+                let s = self.make_string();
+                res = Some(Event::StringInput(s));
+                self.buffer.clear();
+            }
+            Key::Char(c) => {
+                if !c.is_control() {
+                    self.insert(c)
+                }
+            }
+            Key::Left => {
+                if self.cur_pos >= 1 {
+                    self.cur_pos -= 1
+                }
+            }
+            Key::Right => {
+                if self.cur_pos < self.buffer.len() {
+                    self.cur_pos += 1
+                }
+            }
+
+            Key::End => self.cur_pos = self.buffer.len(),
+            Key::Home => self.cur_pos = 0,
+            //Key::Up => print!("↑"),
+            //Key::Down => print!("↓"),
+            Key::Backspace => self.delete(),
+            _ => {}
+        }
+        res
+    }
+}
+
+enum UiFocus {
+    GridArea,
+    InputArea,
+}
+
+impl UiFocus {
+    fn switch(&mut self) {
+        match self {
+            UiFocus::InputArea => *self = UiFocus::GridArea,
+            UiFocus::GridArea => *self = UiFocus::InputArea,
+        }
+    }
+}
+
+pub struct Areas {
+    pub input_area: InputArea,
+    pub grid_area: GridArea,
+    pub message: String,
+}
+
+pub struct Ui {
+    focus: UiFocus,
+    areas: Areas,
+    event_handle: Box<dyn FnMut(Event, &mut Areas)>,
+    stdout: Option<RawTerminal<Stdout>>,
+}
+
+impl Ui {
+    pub fn new(deal_func: Box<dyn FnMut(Event, &mut Areas)>) -> Self {
+        Ui {
+            focus: UiFocus::InputArea,
+            areas: Areas {
+                grid_area: GridArea { cur_x: 0, cur_y: 0 },
+                input_area: InputArea {
+                    cur_pos: 0,
+                    buffer: Vec::new(),
+                },
+
+                message: String::new(),
+            },
+            event_handle: deal_func,
+            stdout: None,
+        }
+    }
+
     fn message(&mut self, s: &str) {
-        self.message = s.to_string()
+        self.areas.message = s.to_string()
     }
     fn clear_all(&mut self) {
         write!(self.stdout.as_mut().unwrap(), "{}", termion::clear::All,).unwrap();
@@ -130,22 +213,14 @@ impl Ui {
     }
 
     fn render(&mut self) {
-        write!(
-            self.stdout.as_mut().unwrap(),
-            "{}{}{}",
-            termion::clear::All,
-            termion::cursor::Goto(1, 3),
-            self.message,
-        )
-        .unwrap();
-
+        write!(self.stdout.as_mut().unwrap(), "{}", termion::clear::All,).unwrap();
 
         let mut i = 0;
-        for l in self.grid_area.render().lines.iter() {
+        for l in self.areas.grid_area.render().lines.iter() {
             write!(
                 self.stdout.as_mut().unwrap(),
                 "{}{}",
-                termion::cursor::Goto(1, 15 + i),
+                termion::cursor::Goto(1, 6 + i),
                 l,
             )
             .unwrap();
@@ -153,26 +228,49 @@ impl Ui {
         }
 
         let mut i = 0;
-        let mut cursor = 0;
-        self.move_cursor(1);
+        for l in self.areas.input_area.render().lines.iter() {
+            write!(
+                self.stdout.as_mut().unwrap(),
+                "{}{}",
+                termion::cursor::Goto(1, 3 + i),
+                l,
+            )
+            .unwrap();
+            i += 1;
+        }
+
+        match self.focus {
+            UiFocus::InputArea => {
+                write!(
+                    self.stdout.as_mut().unwrap(),
+                    "{}===>",
+                    termion::cursor::Goto(1, 1),
+                )
+                .unwrap();
+            }
+            UiFocus::GridArea => write!(
+                self.stdout.as_mut().unwrap(),
+                "{}===>",
+                termion::cursor::Goto(1, 5),
+            )
+            .unwrap(),
+        }
+
         write!(
             self.stdout.as_mut().unwrap(),
-            "{}> ",
-            termion::clear::CurrentLine
+            "{}{}",
+            termion::cursor::Goto(1, 30),
+            self.areas.message,
         )
         .unwrap();
 
-        for c in self.buffer.iter() {
-            print!("{}", c);
-            if i < self.cur_pos {
-                cursor += 1;
-                if !c.is_ascii() {
-                    cursor += 1
-                }
-            }
-            i += 1;
-        }
-        self.move_cursor(cursor + 3);
+        write!(
+            self.stdout.as_mut().unwrap(),
+            "{}",
+            termion::cursor::Goto(self.areas.input_area.cur_pos as u16 + 3, 3),
+        )
+        .unwrap();
+
         self.stdout.as_mut().unwrap().flush().unwrap();
     }
 
@@ -185,61 +283,6 @@ impl Ui {
             }
         });
         rx
-    }
-
-    fn deal_new_key(&mut self, c: termion::event::Key) {
-        match c {
-            Key::Char('\n') => {
-                self.cur_pos = 0;
-                let s = self.make_string();
-                self.message(&s);
-                self.out = s.clone();
-                self.buffer.clear();
-            }
-            Key::Char(' ') => {
-                self.insert(' ')
-            }
-
-
-            Key::Char(c) => {
-                if c.is_alphanumeric() {
-                    self.insert(c)
-                }
-            }
-            Key::Left => {
-                if self.grid_area.cur_x > 0 {
-                    self.grid_area.cur_x -= 1
-                }
-                if self.cur_pos >= 1 {
-                    self.cur_pos -= 1
-                }
-            }
-            Key::Right => {
-                if self.grid_area.cur_x < 7 {
-                    self.grid_area.cur_x += 1
-                }
-                if self.cur_pos <= self.buffer.len() {
-                    self.cur_pos += 1
-                }
-            }
-            Key::Up => {
-                if self.grid_area.cur_y < 7 {
-                    self.grid_area.cur_y += 1
-                }
-            }
-            Key::Down => {
-                if self.grid_area.cur_y > 0 {
-                    self.grid_area.cur_y -= 1
-                }
-            }
-
-            Key::End => self.cur_pos = self.buffer.len(),
-            Key::Home => self.cur_pos = 0,
-            //Key::Up => print!("↑"),
-            //Key::Down => print!("↓"),
-            Key::Backspace => self.delete(),
-            _ => {}
-        }
     }
 
     pub fn run(&mut self) {
@@ -260,25 +303,28 @@ impl Ui {
                         break;
                     }
 
-                    self.deal_new_key(c)
+                    if c == Key::Char('\t') {
+                        self.focus.switch();
+                        continue;
+                    }
+
+                    let event: Option<Event>;
+
+                    match self.focus {
+                        UiFocus::InputArea => {
+                            event = self.areas.input_area.deal_new_key(c);
+                        }
+                        UiFocus::GridArea => {
+                            event = self.areas.grid_area.deal_new_key(c);
+                        }
+                    };
+
+                    if event.is_some() {
+                        (*self.event_handle)(event.unwrap(), &mut self.areas)
+                    }
                 }
                 Err(mpsc::TryRecvError::Empty) => {}
                 Err(mpsc::TryRecvError::Disconnected) => panic!("Channel disconnected"),
-            }
-
-            match self.rx_input.try_recv() {
-                Ok(temp) => {
-                    self.message = temp.clone();
-                    self.grid_area.gameInfo=temp;
-                }
-
-                Err(mpsc::TryRecvError::Empty) => {}
-                Err(mpsc::TryRecvError::Disconnected) => panic!("Channel disconnected"),
-            }
-
-            if !self.out.is_empty() {
-                self.tx_output.send(self.out.clone()).unwrap();
-                self.out.clear();
             }
 
             self.render();

@@ -1,4 +1,4 @@
-use chess_core::{Game,Stage,Cmd,MoveCmd,PromoteCmd,Vec2};
+use chess_core::{Cmd, Game, MoveCmd, PromoteCmd, Stage, Vec2};
 use lexer::{Lexer, Token};
 fn get_line() -> String {
     let stdin = io::stdin();

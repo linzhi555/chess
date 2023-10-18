@@ -1,23 +1,11 @@
-use client::{Areas, Event, Ui};
+use std::io::Read;
+
 fn main() {
-    let x = "Info: ";
-    let f = |event: Event, area: &mut Areas| {
-        area.message.clear();
-        area.message.push_str(x);
+    let mut res = reqwest::blocking::get("http://localhost:8080/hello/client").unwrap();
+    let mut body = String::new();
+    res.read_to_string(&mut body).unwrap();
 
-        match event {
-            Event::StringInput(s) => {
-                area.message.push_str("new input");
-                area.message.push_str(s.as_str());
-            }
-
-            Event::GridClick(x, y) => {
-                area.message.push_str("click event");
-                area.message.push_str(format!("{} {}", x, y).as_str())
-            }
-        }
-    };
-
-    let mut ui = Ui::new(Box::new(f));
-    ui.run();
+    println!("Status: {}", res.status());
+    println!("Headers:\n{:#?}", res.headers());
+    println!("Body:\n{}", body);
 }

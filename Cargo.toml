@@ -4,5 +4,6 @@ members = [
     "lexer",
     "message",
     "tui",
+    "server",
     "client",
 ]

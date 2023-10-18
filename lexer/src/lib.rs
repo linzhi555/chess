@@ -31,15 +31,13 @@ impl Lexer {
         }
     }
 
-    pub fn to_token_vec(s:&str) -> Vec<Token>{
+    pub fn to_token_vec(s: &str) -> Vec<Token> {
         let mut lexer = Lexer::new();
         lexer.tokenize(s);
         lexer.result
-
     }
 
-
-    pub fn add_keyword(&mut self,k:&str){
+    pub fn add_keyword(&mut self, k: &str) {
         self.keywords.push(k.to_string());
     }
 
