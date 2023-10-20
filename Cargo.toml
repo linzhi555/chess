@@ -2,7 +2,6 @@
 members = [
     "chess-core",
     "lexer",
-    "message",
     "tui",
     "server",
     "client",

@@ -1,4 +1,5 @@
 use core::time;
+use std::future::Future;
 use std::io::{stdin, stdout, Stdout, Write};
 use std::sync::mpsc;
 use std::sync::mpsc::Receiver;
@@ -27,6 +28,7 @@ pub enum Event {
     GridClick(u32, u32),
 }
 
+#[derive(Clone)]
 pub struct GridArea {
     cur_x: u32,
     cur_y: u32,
@@ -87,6 +89,7 @@ impl GridArea {
     }
 }
 
+#[derive(Clone)]
 pub struct InputArea {
     cur_pos: usize,
     buffer: Vec<char>,
@@ -172,22 +175,28 @@ impl UiFocus {
         }
     }
 }
-
+#[derive(Clone)]
 pub struct Areas {
     pub input_area: InputArea,
     pub grid_area: GridArea,
     pub message: String,
 }
 
-pub struct Ui {
+pub struct Ui<F>
+where
+    F: std::future::Future<Output = Areas>,
+{
     focus: UiFocus,
     areas: Areas,
-    event_handle: Box<dyn FnMut(Event, &mut Areas)>,
+    event_handle: fn(event: Event, areas: Areas) -> F,
     stdout: Option<RawTerminal<Stdout>>,
 }
 
-impl Ui {
-    pub fn new(deal_func: Box<dyn FnMut(Event, &mut Areas)>) -> Self {
+impl<F> Ui<F>
+where
+    F: std::future::Future<Output = Areas>,
+{
+    pub fn new(foo: fn(event: Event, areas: Areas) -> F) -> Self {
         Ui {
             focus: UiFocus::InputArea,
             areas: Areas {
@@ -199,7 +208,7 @@ impl Ui {
 
                 message: String::new(),
             },
-            event_handle: deal_func,
+            event_handle: foo,
             stdout: None,
         }
     }
@@ -285,7 +294,7 @@ impl Ui {
         rx
     }
 
-    pub fn run(&mut self) {
+    pub async fn run(&mut self) {
         let mut stdout = stdout().into_raw_mode().unwrap();
         stdout.flush().unwrap();
         self.stdout = Some(stdout);
@@ -293,7 +302,7 @@ impl Ui {
         self.message("q to exit. Type stuff, use alt, and so on.");
         self.render();
 
-        let stdin_channel = Ui::spawn_stdin_channel();
+        let stdin_channel = Self::spawn_stdin_channel();
         loop {
             let c: termion::event::Key;
             match stdin_channel.try_recv() {
@@ -320,7 +329,7 @@ impl Ui {
                     };
 
                     if event.is_some() {
-                        (*self.event_handle)(event.unwrap(), &mut self.areas)
+                        self.areas = (self.event_handle)(event.unwrap(), self.areas.clone()).await;
                     }
                 }
                 Err(mpsc::TryRecvError::Empty) => {}

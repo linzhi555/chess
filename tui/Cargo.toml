@@ -9,3 +9,5 @@ edition = "2021"
 lexer={path="../lexer"}
 chess-core={path="../chess-core"}
 termion = "2.0.1"
+
+tokio = { version = "1", features = ["full"] }

@@ -1,23 +1,26 @@
+use tokio;
 use tui::{Areas, Event, Ui};
-fn main() {
-    let x = "Info: ";
-    let f = |event: Event, area: &mut Areas| {
-        area.message.clear();
-        area.message.push_str(x);
 
-        match event {
-            Event::StringInput(s) => {
-                area.message.push_str("new input");
-                area.message.push_str(s.as_str());
-            }
+async fn deal_func(event: Event, areas: Areas) -> Areas {
+    let mut areas = areas;
 
-            Event::GridClick(x, y) => {
-                area.message.push_str("click event");
-                area.message.push_str(format!("{} {}", x, y).as_str())
-            }
+    match event {
+        Event::StringInput(x) => {
+            areas.message.clear();
+            areas.message.push_str(x.as_str());
         }
-    };
+        _ => {}
+    }
 
-    let mut ui = Ui::new(Box::new(f));
-    ui.run();
+    areas
+}
+
+async fn example2() {
+    let mut ui = Ui::new(deal_func);
+    ui.run().await;
+}
+
+fn main() {
+    let multi_threaded_runtime = tokio::runtime::Runtime::new().unwrap();
+    multi_threaded_runtime.block_on(example2());
 }
