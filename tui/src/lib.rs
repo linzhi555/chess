@@ -1,9 +1,11 @@
 use core::time;
+use std::collections::HashMap;
 use std::future::Future;
 use std::io::{stdin, stdout, Stdout, Write};
 use std::sync::mpsc;
 use std::sync::mpsc::Receiver;
 use std::thread;
+use termion::color;
 use termion::input::TermRead;
 use termion::raw::IntoRawMode;
 use termion::{event::Key, raw::RawTerminal};
@@ -26,12 +28,18 @@ impl Frame {
 pub enum Event {
     StringInput(String),
     GridClick(u32, u32),
+    TimerSignal,
 }
 
 #[derive(Clone)]
 pub struct GridArea {
     cur_x: u32,
     cur_y: u32,
+
+    pub selected: bool,
+    pub select_x: u32,
+    pub select_y: u32,
+    pub buffers: HashMap<String, String>,
 }
 impl GridArea {
     fn deal_new_key(&mut self, c: termion::event::Key) -> Option<Event> {
@@ -69,20 +77,43 @@ impl GridArea {
 
     fn render(&self) -> Frame {
         let mut lines = Vec::new();
-
+        let empty = "    ";
+        let arrow = format!("{} -> {}", color::Fg(color::Red), color::Fg(color::White));
+        let selec = " v  ";
         for y in (0..8).rev() {
-            lines.push("--------------------------------".to_string());
+            lines.push("--------------------------------------".to_string());
             let mut temp = String::new();
             for x in 0..8 {
                 temp.push_str("|");
-                if x == self.cur_x && y == self.cur_y {
-                    temp.push_str("-> ");
+
+                if self.selected && x == self.select_x && y == self.select_y {
+                    temp.push_str(selec);
+                } else if x == self.cur_x && y == self.cur_y {
+                    temp.push_str(arrow.as_str());
                 } else {
-                    temp.push_str("   ");
+                    temp.push_str(empty);
                 }
             }
 
             temp.push_str("|");
+            lines.push(temp);
+
+            let mut temp = String::new();
+            for x in 0..8 {
+                let key = format!("({},{})", x, y);
+                let val = self.buffers.get(key.as_str());
+                temp.push_str("|");
+
+                if val.is_some() {
+                    let mut s = val.unwrap().clone();
+                    s.truncate(4);
+                    temp.push_str(s.as_str());
+                } else {
+                    temp.push_str(empty);
+                }
+            }
+            temp.push_str("|");
+
             lines.push(temp);
         }
         return Frame::from_vec(lines);
@@ -190,6 +221,7 @@ where
     areas: Areas,
     event_handle: fn(event: Event, areas: Areas) -> F,
     stdout: Option<RawTerminal<Stdout>>,
+    pub time_counter: usize,
 }
 
 impl<F> Ui<F>
@@ -200,7 +232,14 @@ where
         Ui {
             focus: UiFocus::InputArea,
             areas: Areas {
-                grid_area: GridArea { cur_x: 0, cur_y: 0 },
+                grid_area: GridArea {
+                    cur_x: 0,
+                    cur_y: 0,
+                    buffers: HashMap::new(),
+                    select_x: 0,
+                    select_y: 0,
+                    selected: false,
+                },
                 input_area: InputArea {
                     cur_pos: 0,
                     buffer: Vec::new(),
@@ -210,6 +249,7 @@ where
             },
             event_handle: foo,
             stdout: None,
+            time_counter: 0,
         }
     }
 
@@ -335,6 +375,11 @@ where
                 Err(mpsc::TryRecvError::Empty) => {}
                 Err(mpsc::TryRecvError::Disconnected) => panic!("Channel disconnected"),
             }
+
+            if self.time_counter % 20 == 0 {
+                self.areas = (self.event_handle)(Event::TimerSignal, self.areas.clone()).await;
+            }
+            self.time_counter += 1;
 
             self.render();
             thread::sleep(time::Duration::from_millis(1))

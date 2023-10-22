@@ -1,6 +1,6 @@
 use std::sync::Mutex;
 
-use actix_web::{get, post, web, App, Error, HttpResponse, HttpServer, Responder};
+use actix_web::{get, post, web, App, HttpServer, Responder};
 
 use chess_core::{Cmd, Game};
 
@@ -9,11 +9,17 @@ async fn greet(name: web::Path<String>) -> impl Responder {
     format!("Hello {name}!")
 }
 
-#[post("/game")]
-async fn game_deal(cmd: web::Json<Cmd>, game: web::Data<Mutex<Game>>) -> impl Responder {
+#[post("/game/cmd")]
+async fn game_cmd(cmd: web::Json<Cmd>, game: web::Data<Mutex<Game>>) -> impl Responder {
     let mut game = game.lock().unwrap();
-    game.exec_cmd(&cmd).unwrap();
+    let _ = game.exec_cmd(&cmd);
     println!("{:?}", *game);
+    web::Json(game.clone())
+}
+
+#[post("/game/state")]
+async fn game_state(game: web::Data<Mutex<Game>>) -> impl Responder {
+    let game = game.lock().unwrap();
     web::Json(game.clone())
 }
 
@@ -23,7 +29,8 @@ async fn main() -> std::io::Result<()> {
     HttpServer::new(move || {
         App::new()
             .service(greet)
-            .service(game_deal)
+            .service(game_cmd)
+            .service(game_state)
             .app_data(game.clone())
     })
     .bind(("127.0.0.1", 8080))?

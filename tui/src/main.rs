@@ -9,6 +9,12 @@ async fn deal_func(event: Event, areas: Areas) -> Areas {
             areas.message.clear();
             areas.message.push_str(x.as_str());
         }
+        Event::GridClick(x, y) => {
+            areas.grid_area.selected = true;
+            areas.grid_area.select_x = x;
+            areas.grid_area.select_y = y;
+        }
+
         _ => {}
     }
 

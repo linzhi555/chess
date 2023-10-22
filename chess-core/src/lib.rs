@@ -110,7 +110,7 @@ const ERR_PIECE_NOT_FOUND: &'static str = "piece not found";
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ChessBoard {
-    board: HashMap<String, Piece>,
+    pub board: HashMap<String, Piece>,
 }
 
 impl ChessBoard {
@@ -146,7 +146,7 @@ impl ChessBoard {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Game {
     stage: Stage,
-    board: ChessBoard,
+    pub board: ChessBoard,
 }
 
 impl Game {
