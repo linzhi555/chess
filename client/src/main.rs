@@ -1,56 +1,82 @@
+use std::sync::{Arc,Mutex};
+
 use chess_core::{Cmd, Game, MoveCmd, Vec2};
-use tokio;
+use tokio::{self, join};
 use tui::{Areas, Event, Ui};
 
-async fn deal_func(event: Event, areas: Areas) -> Areas {
-    let mut areas = areas;
+struct Client {
+    connected: bool,
+    ui:Ui
+}
+//
+impl Client {
 
-    match event {
-        Event::TimerSignal => {
-            let game = game_state_post().await;
-            areas.grid_area.buffers.clear();
-            for ele in game.board.board {
-                areas
-                    .grid_area
-                    .buffers
-                    .insert(ele.0.to_string(), format!("{:?}", ele.1));
+    fn new() -> Self{
+        return Client { connected: false, ui: Ui::new() }
+    }
+
+    async fn run(&mut self) {
+
+        self.ui.render();
+        loop {
+            let (event,gamestate) = join!(self.ui.next_event(100), game_state_post());
+            self.deal_func(event,gamestate.unwrap()).await;
+            self.ui.render()
+        }
+    }
+
+
+    async fn deal_func(&mut self,event: Event,game:Game)  {
+        match event {
+            Event::ExitSignal => {
+                panic!("you escaped!")
             }
-        }
-
-        Event::StringInput(x) => {
-            areas.message.clear();
-            areas.message.push_str(x.as_str());
-        }
-
-        Event::GridClick(x, y) => {
-            areas.message.clear();
-
-            if areas.grid_area.selected == false {
-                areas.grid_area.selected = true;
-                areas.grid_area.select_x = x;
-                areas.grid_area.select_y = y;
-            } else {
-                areas.grid_area.selected = false;
-                let game = game_cmd_post(
-                    Vec2::new(
-                        areas.grid_area.select_x as i32,
-                        areas.grid_area.select_y as i32,
-                    ),
-                    Vec2::new(x as i32, y as i32),
-                )
-                .await;
-                areas.grid_area.buffers.clear();
+            
+            Event::TimerSignal => {
+                self.ui.areas.grid_area.buffers.clear();
                 for ele in game.board.board {
-                    areas
+                    self.ui.areas
                         .grid_area
                         .buffers
                         .insert(ele.0.to_string(), format!("{:?}", ele.1));
                 }
             }
-        }
-    }
 
-    areas
+            Event::StringInput(x) => {
+                self.ui.areas.message.clear();
+                self.ui.areas.message.push_str(x.as_str());
+            }
+
+            Event::GridClick(x, y) => {
+
+                self.ui.areas.message.clear();
+
+                if self.ui.areas.grid_area.selected == false {
+                    self.ui.areas.grid_area.selected = true;
+                    self.ui.areas.grid_area.select_x = x;
+                    self.ui.areas.grid_area.select_y = y;
+                } else {
+                    self.ui.areas.grid_area.selected = false;
+                    let game = game_cmd_post(
+                        Vec2::new(
+                            self.ui.areas.grid_area.select_x as i32,
+                            self.ui.areas.grid_area.select_y as i32,
+                        ),
+                        Vec2::new(x as i32, y as i32),
+                    )
+                    .await;
+                    self.ui.areas.grid_area.buffers.clear();
+                    for ele in game.board.board {
+                        self.ui.areas
+                            .grid_area
+                            .buffers
+                            .insert(ele.0.to_string(), format!("{:?}", ele.1));
+                    }
+                }
+            }
+        }
+
+    }
 }
 
 async fn game_cmd_post(from: Vec2, to: Vec2) -> Game {
@@ -70,7 +96,7 @@ async fn game_cmd_post(from: Vec2, to: Vec2) -> Game {
     //println!("{:?}",game)
 }
 
-async fn game_state_post() -> Game {
+async fn game_state_post() -> Result<Game, &'static str> {
     let c = reqwest::Client::new();
     let res = c
         .post("http://localhost:8080/game/state")
@@ -79,13 +105,13 @@ async fn game_state_post() -> Game {
         .unwrap();
 
     let game: Game = res.json().await.unwrap();
-    game
+    Ok(game)
     //println!("{:?}",game)
 }
 
 async fn example2() {
-    let mut ui = Ui::new(deal_func);
-    ui.run().await;
+    let mut  client = Client::new();
+    client.run().await;
 }
 
 fn main() {

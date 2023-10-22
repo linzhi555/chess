@@ -9,7 +9,7 @@ use termion::color;
 use termion::input::TermRead;
 use termion::raw::IntoRawMode;
 use termion::{event::Key, raw::RawTerminal};
-
+use tokio::time::{sleep, Duration};
 pub struct Frame {
     lines: Vec<String>,
 }
@@ -29,6 +29,7 @@ pub enum Event {
     StringInput(String),
     GridClick(u32, u32),
     TimerSignal,
+    ExitSignal,
 }
 
 #[derive(Clone)]
@@ -213,22 +214,20 @@ pub struct Areas {
     pub message: String,
 }
 
-pub struct Ui<F>
+pub struct Ui
 where
-    F: std::future::Future<Output = Areas>,
 {
     focus: UiFocus,
-    areas: Areas,
-    event_handle: fn(event: Event, areas: Areas) -> F,
-    stdout: Option<RawTerminal<Stdout>>,
+    pub areas: Areas,
+    stdout: RawTerminal<Stdout>,
+    stdin_channel:Receiver<termion::event::Key>,
     pub time_counter: usize,
 }
 
-impl<F> Ui<F>
+impl Ui
 where
-    F: std::future::Future<Output = Areas>,
 {
-    pub fn new(foo: fn(event: Event, areas: Areas) -> F) -> Self {
+    pub fn new() -> Self {
         Ui {
             focus: UiFocus::InputArea,
             areas: Areas {
@@ -247,8 +246,8 @@ where
 
                 message: String::new(),
             },
-            event_handle: foo,
-            stdout: None,
+            stdout: stdout().into_raw_mode().unwrap(),
+            stdin_channel: Self::spawn_stdin_channel(),
             time_counter: 0,
         }
     }
@@ -257,17 +256,17 @@ where
         self.areas.message = s.to_string()
     }
     fn clear_all(&mut self) {
-        write!(self.stdout.as_mut().unwrap(), "{}", termion::clear::All,).unwrap();
-        self.stdout.as_mut().unwrap().flush().unwrap();
+        write!(self.stdout, "{}", termion::clear::All,).unwrap();
+        self.stdout.flush().unwrap();
     }
 
-    fn render(&mut self) {
-        write!(self.stdout.as_mut().unwrap(), "{}", termion::clear::All,).unwrap();
+    pub fn render(&mut self) {
+        write!(self.stdout, "{}", termion::clear::All,).unwrap();
 
         let mut i = 0;
         for l in self.areas.grid_area.render().lines.iter() {
             write!(
-                self.stdout.as_mut().unwrap(),
+                self.stdout,
                 "{}{}",
                 termion::cursor::Goto(1, 6 + i),
                 l,
@@ -279,7 +278,7 @@ where
         let mut i = 0;
         for l in self.areas.input_area.render().lines.iter() {
             write!(
-                self.stdout.as_mut().unwrap(),
+                self.stdout,
                 "{}{}",
                 termion::cursor::Goto(1, 3 + i),
                 l,
@@ -291,14 +290,14 @@ where
         match self.focus {
             UiFocus::InputArea => {
                 write!(
-                    self.stdout.as_mut().unwrap(),
+                    self.stdout,
                     "{}===>",
                     termion::cursor::Goto(1, 1),
                 )
                 .unwrap();
             }
             UiFocus::GridArea => write!(
-                self.stdout.as_mut().unwrap(),
+                self.stdout,
                 "{}===>",
                 termion::cursor::Goto(1, 5),
             )
@@ -306,7 +305,7 @@ where
         }
 
         write!(
-            self.stdout.as_mut().unwrap(),
+            self.stdout,
             "{}{}",
             termion::cursor::Goto(1, 30),
             self.areas.message,
@@ -314,13 +313,13 @@ where
         .unwrap();
 
         write!(
-            self.stdout.as_mut().unwrap(),
+            self.stdout,
             "{}",
             termion::cursor::Goto(self.areas.input_area.cur_pos as u16 + 3, 3),
         )
         .unwrap();
 
-        self.stdout.as_mut().unwrap().flush().unwrap();
+        self.stdout.flush().unwrap();
     }
 
     fn spawn_stdin_channel() -> Receiver<termion::event::Key> {
@@ -334,22 +333,17 @@ where
         rx
     }
 
-    pub async fn run(&mut self) {
-        let mut stdout = stdout().into_raw_mode().unwrap();
-        stdout.flush().unwrap();
-        self.stdout = Some(stdout);
 
-        self.message("q to exit. Type stuff, use alt, and so on.");
-        self.render();
+    pub async fn next_event(&mut self,timeout:usize) -> Event {
 
-        let stdin_channel = Self::spawn_stdin_channel();
-        loop {
+        for _i in 0 .. timeout {
+
             let c: termion::event::Key;
-            match stdin_channel.try_recv() {
+            match self.stdin_channel.try_recv() {
                 Ok(temp) => {
                     c = temp;
                     if c == Key::Ctrl('d') {
-                        break;
+                        return Event::ExitSignal;
                     }
 
                     if c == Key::Char('\t') {
@@ -367,23 +361,71 @@ where
                             event = self.areas.grid_area.deal_new_key(c);
                         }
                     };
-
+                    
                     if event.is_some() {
-                        self.areas = (self.event_handle)(event.unwrap(), self.areas.clone()).await;
+                        return event.unwrap();
                     }
+                    self.render();
                 }
                 Err(mpsc::TryRecvError::Empty) => {}
                 Err(mpsc::TryRecvError::Disconnected) => panic!("Channel disconnected"),
             }
-
-            if self.time_counter % 20 == 0 {
-                self.areas = (self.event_handle)(Event::TimerSignal, self.areas.clone()).await;
-            }
-            self.time_counter += 1;
-
-            self.render();
-            thread::sleep(time::Duration::from_millis(1))
+            sleep(Duration::from_millis(1)).await;
         }
-        self.clear_all();
+        return Event::TimerSignal;
     }
+
+
+    //pub async fn run(&mut self) {
+    //    let mut stdout = stdout().into_raw_mode().unwrap();
+    //    stdout.flush().unwrap();
+    //    self.stdout = Some(stdout);
+
+    //    self.message("q to exit. Type stuff, use alt, and so on.");
+    //    self.render();
+
+    //    let stdin_channel = Self::spawn_stdin_channel();
+    //    loop {
+    //        let c: termion::event::Key;
+    //        match stdin_channel.try_recv() {
+    //            Ok(temp) => {
+    //                c = temp;
+    //                if c == Key::Ctrl('d') {
+    //                    break;
+    //                }
+
+    //                if c == Key::Char('\t') {
+    //                    self.focus.switch();
+    //                    continue;
+    //                }
+
+    //                let event: Option<Event>;
+
+    //                match self.focus {
+    //                    UiFocus::InputArea => {
+    //                        event = self.areas.input_area.deal_new_key(c);
+    //                    }
+    //                    UiFocus::GridArea => {
+    //                        event = self.areas.grid_area.deal_new_key(c);
+    //                    }
+    //                };
+
+    //                if event.is_some() {
+    //                    self.areas = (self.event_handle)(event.unwrap(), self.areas.clone()).await;
+    //                }
+    //            }
+    //            Err(mpsc::TryRecvError::Empty) => {}
+    //            Err(mpsc::TryRecvError::Disconnected) => panic!("Channel disconnected"),
+    //        }
+
+    //        if self.time_counter % 20 == 0 {
+    //            self.areas = (self.event_handle)(Event::TimerSignal, self.areas.clone()).await;
+    //        }
+    //        self.time_counter += 1;
+
+    //        self.render();
+    //        thread::sleep(time::Duration::from_millis(1))
+    //    }
+    //    self.clear_all();
+    //}
 }
