@@ -3,6 +3,8 @@ use std::sync::{Arc,Mutex};
 use chess_core::{Cmd, Game, MoveCmd, Vec2};
 use tokio::{self, join};
 use tui::{Areas, Event, Ui};
+use tokio::sync::mpsc;
+use tokio::time::{sleep,Duration};
 
 struct Client {
     connected: bool,
@@ -17,29 +19,45 @@ impl Client {
 
     async fn run(&mut self) {
 
+        let (tx,mut rx)= mpsc::channel(1);
+        tokio::spawn(async move
+            {
+                loop{
+
+                    let game = game_state_post().await;
+                    tx.send(game.unwrap()).await.unwrap();
+                }
+
+            }
+        );
+
         self.ui.render();
         loop {
-            let (event,gamestate) = join!(self.ui.next_event(100), game_state_post());
-            self.deal_func(event,gamestate.unwrap()).await;
+            let (event,gamestate) = join!(self.ui.next_event(10), rx.recv());
+            self.deal_func(event).await;
+            
+            {
+                self.ui.areas.grid_area.buffers.clear();
+                for ele in gamestate.unwrap().board.board {
+                    self.ui.areas
+                        .grid_area
+                        .buffers
+                        .insert(ele.0.to_string(), format!("{:?}", ele.1));
+                }
+            }
+
             self.ui.render()
         }
     }
 
 
-    async fn deal_func(&mut self,event: Event,game:Game)  {
+    async fn deal_func(&mut self,event: Event)  {
         match event {
             Event::ExitSignal => {
                 panic!("you escaped!")
             }
             
             Event::TimerSignal => {
-                self.ui.areas.grid_area.buffers.clear();
-                for ele in game.board.board {
-                    self.ui.areas
-                        .grid_area
-                        .buffers
-                        .insert(ele.0.to_string(), format!("{:?}", ele.1));
-                }
             }
 
             Event::StringInput(x) => {
@@ -65,13 +83,13 @@ impl Client {
                         Vec2::new(x as i32, y as i32),
                     )
                     .await;
-                    self.ui.areas.grid_area.buffers.clear();
-                    for ele in game.board.board {
-                        self.ui.areas
-                            .grid_area
-                            .buffers
-                            .insert(ele.0.to_string(), format!("{:?}", ele.1));
-                    }
+//                    self.ui.areas.grid_area.buffers.clear();
+//                    for ele in game.board.board {
+//                        self.ui.areas
+//                            .grid_area
+//                            .buffers
+//                            .insert(ele.0.to_string(), format!("{:?}", ele.1));
+//                    }
                 }
             }
         }
