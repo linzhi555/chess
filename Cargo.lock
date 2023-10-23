@@ -353,6 +353,7 @@ version = "0.1.0"
 dependencies = [
  "chess-core",
  "reqwest",
+ "server",
  "tokio",
  "tui",
 ]
