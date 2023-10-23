@@ -212,7 +212,7 @@ async fn login_post(id: String, password: String) -> Result<String, &'static str
 
 async fn example2() {
     let mut client = Client::new();
-    client.login().await;
+    //client.login().await;
     client.run().await;
 }
 

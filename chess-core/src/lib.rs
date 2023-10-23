@@ -98,6 +98,35 @@ impl BasePiece {
             false
         }
     }
+
+    pub fn is_your_turn(&self, s: &Stage) -> bool {
+        match s {
+            Stage::WhiteTurn | Stage::WhitePromotion => {
+                if self.camp == Camp::White {
+                    true
+                } else {
+                    false
+                }
+            }
+            Stage::BlackTurn | Stage::WhitePromotion => {
+                if self.camp == Camp::White {
+                    false
+                } else {
+                    true
+                }
+            }
+
+            _ => false,
+        }
+    }
+
+    pub fn relative_move(&self, newpos: Vec2) -> Vec2 {
+        if self.camp == Camp::White {
+            Vec2::new(newpos.x - self.pos.x, newpos.y - self.pos.y)
+        } else {
+            Vec2::new(self.pos.x - newpos.x, self.pos.y - newpos.y)
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -127,6 +156,17 @@ impl King {
             base: BasePiece::new(x, y, camp, "king".to_string()),
         }
     }
+    pub fn is_legal_move(rmove: Vec2) -> bool {
+        if rmove.x != 1 && rmove.x != -1 {
+            return false;
+        }
+
+        if rmove.y != 1 && rmove.y != -1 {
+            return false;
+        }
+
+        true
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -140,6 +180,13 @@ impl Piece {
         match self {
             Piece::Pawn(p) => p.base.clone(),
             Piece::King(p) => p.base.clone(),
+        }
+    }
+
+    pub fn change_pos(&mut self, newpos: Vec2) {
+        match *self {
+            Piece::Pawn(ref mut p) => p.base.pos = newpos,
+            Piece::King(ref mut p) => p.base.pos = newpos,
         }
     }
 }
@@ -173,9 +220,10 @@ impl ChessBoard {
     }
 
     fn move_piece(&mut self, from: Vec2, to: Vec2) -> Result<(), &'static str> {
-        let p: Piece;
+        let mut p: Piece;
         if let Some(res) = self.board.get(from.to_string().as_str()) {
             p = res.clone();
+            p.change_pos(to);
         } else {
             return Err(ERR_PIECE_NOT_FOUND);
         }
@@ -218,18 +266,71 @@ impl Game {
     }
 
     pub fn exec_cmd(&mut self, c: &Cmd) -> Result<(), &'static str> {
-        match c {
+        let res = match c {
             Cmd::Move(x) => self.deal_move(x.from, x.to),
 
             Cmd::Promote(_) => Ok(()),
+        };
+
+        if res.is_ok() {
+            match self.stage.clone() {
+                Stage::BlackTurn => {
+                    self.stage = Stage::WhiteTurn;
+                }
+
+                Stage::WhiteTurn => {
+                    self.stage = Stage::BlackTurn;
+                }
+
+                _ => {}
+            }
         }
+        res
     }
 
     fn deal_move(&mut self, from: Vec2, to: Vec2) -> Result<(), &'static str> {
         if let Some(p) = self.board.get_piece_mut(from) {
+            self.deal_move_turn(from)?;
+            self.deal_move_piece(from, to)?;
             self.board.move_piece(from, to)
         } else {
-            Err("piece can not find")
+            return Err("piece can not find");
+        }
+    }
+
+    fn deal_move_turn(&mut self, from: Vec2) -> Result<(), &'static str> {
+        let piece = self.board.get_piece_mut(from).unwrap();
+        if piece.get_base().is_your_turn(&self.stage) {
+            Ok(())
+        } else {
+            Err("not your turn")
+        }
+    }
+
+    fn deal_move_piece(&mut self, from: Vec2, to: Vec2) -> Result<(), &'static str> {
+        let piece = self.board.get_piece_mut(from).unwrap();
+        match *piece {
+            Piece::Pawn(_) => {
+                if piece.get_base().relative_move(to) == Vec2::new(0, 1) {
+                    return Ok(());
+                } else {
+                    return Err("piece can move like that");
+                }
+            }
+
+            Piece::King(_) => {
+                let relat_move = piece.get_base().relative_move(to);
+                if King::is_legal_move(relat_move) {
+                    return Ok(());
+                } else {
+                    return Err("piece can move like that");
+                }
+            }
+
+            _ => {
+                self.board.move_piece(from, to).unwrap();
+                Ok(())
+            }
         }
     }
 
