@@ -1,99 +1,100 @@
-use std::sync::{Arc,Mutex};
+use std::sync::{Arc, Mutex};
 
 use chess_core::{Cmd, Game, MoveCmd, Vec2};
+use tokio::sync::mpsc;
+use tokio::time::{sleep, Duration};
 use tokio::{self, join};
 use tui::{Areas, Event, Ui};
-use tokio::sync::mpsc;
-use tokio::time::{sleep,Duration};
 
 struct Client {
     connected: bool,
-    ui:Ui
+    ui: Ui,
+    game: Arc<Mutex<Game>>,
 }
 //
 impl Client {
-
-    fn new() -> Self{
-        return Client { connected: false, ui: Ui::new() }
+    fn new() -> Self {
+        return Client {
+            connected: false,
+            ui: Ui::new(),
+            game: Arc::new(Mutex::new(Game::new())),
+        };
     }
 
     async fn run(&mut self) {
-
-        let (tx,mut rx)= mpsc::channel(1);
-        tokio::spawn(async move
-            {
-                loop{
-
-                    let game = game_state_post().await;
-                    tx.send(game.unwrap()).await.unwrap();
+        let game_ref = self.game.clone();
+        tokio::spawn(async move {
+            loop {
+                let gamestate = { game_state_post().await.unwrap() };
+                {
+                    *(game_ref.lock().unwrap()) = gamestate.clone();
                 }
 
+                sleep(Duration::from_millis(30)).await;
             }
-        );
-
+        });
         self.ui.render();
         loop {
-            let (event,gamestate) = join!(self.ui.next_event(10), rx.recv());
-            self.deal_func(event).await;
-            
             {
-                self.ui.areas.grid_area.buffers.clear();
-                for ele in gamestate.unwrap().board.board {
-                    self.ui.areas
-                        .grid_area
-                        .buffers
-                        .insert(ele.0.to_string(), format!("{:?}", ele.1));
-                }
-            }
+                let event = self.ui.next_event(10).await;
+                Self::deal_func(&mut self.ui, event).await;
 
-            self.ui.render()
+                self.ui.areas.grid_area.buffers.clear();
+                {
+                    for ele in &self.game.lock().unwrap().board.board {
+                        self.ui
+                            .areas
+                            .grid_area
+                            .buffers
+                            .insert(ele.0.to_string(), format!("{:?}", ele.1));
+                    }
+                }
+
+                self.ui.render();
+            }
         }
     }
 
-
-    async fn deal_func(&mut self,event: Event)  {
+    async fn deal_func(ui: &mut Ui, event: Event) {
         match event {
             Event::ExitSignal => {
                 panic!("you escaped!")
             }
-            
-            Event::TimerSignal => {
-            }
+
+            Event::TimerSignal => {}
 
             Event::StringInput(x) => {
-                self.ui.areas.message.clear();
-                self.ui.areas.message.push_str(x.as_str());
+                ui.areas.message.clear();
+                ui.areas.message.push_str(x.as_str());
             }
 
             Event::GridClick(x, y) => {
+                ui.areas.message.clear();
 
-                self.ui.areas.message.clear();
-
-                if self.ui.areas.grid_area.selected == false {
-                    self.ui.areas.grid_area.selected = true;
-                    self.ui.areas.grid_area.select_x = x;
-                    self.ui.areas.grid_area.select_y = y;
+                if ui.areas.grid_area.selected == false {
+                    ui.areas.grid_area.selected = true;
+                    ui.areas.grid_area.select_x = x;
+                    ui.areas.grid_area.select_y = y;
                 } else {
-                    self.ui.areas.grid_area.selected = false;
+                    ui.areas.grid_area.selected = false;
                     let game = game_cmd_post(
                         Vec2::new(
-                            self.ui.areas.grid_area.select_x as i32,
-                            self.ui.areas.grid_area.select_y as i32,
+                            ui.areas.grid_area.select_x as i32,
+                            ui.areas.grid_area.select_y as i32,
                         ),
                         Vec2::new(x as i32, y as i32),
                     )
                     .await;
-//                    self.ui.areas.grid_area.buffers.clear();
-//                    for ele in game.board.board {
-//                        self.ui.areas
-//                            .grid_area
-//                            .buffers
-//                            .insert(ele.0.to_string(), format!("{:?}", ele.1));
-//                    }
+                    //                    self.ui.areas.grid_area.buffers.clear();
+                    //                    for ele in game.board.board {
+                    //                        self.ui.areas
+                    //                            .grid_area
+                    //                            .buffers
+                    //                            .insert(ele.0.to_string(), format!("{:?}", ele.1));
+                    //                    }
                 }
             }
         }
-
     }
 }
 
@@ -128,7 +129,7 @@ async fn game_state_post() -> Result<Game, &'static str> {
 }
 
 async fn example2() {
-    let mut  client = Client::new();
+    let mut client = Client::new();
     client.run().await;
 }
 

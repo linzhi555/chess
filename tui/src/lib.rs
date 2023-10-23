@@ -214,19 +214,15 @@ pub struct Areas {
     pub message: String,
 }
 
-pub struct Ui
-where
-{
+pub struct Ui {
     focus: UiFocus,
     pub areas: Areas,
     stdout: RawTerminal<Stdout>,
-    stdin_channel:Receiver<termion::event::Key>,
+    stdin_channel: Receiver<termion::event::Key>,
     pub time_counter: usize,
 }
 
-impl Ui
-where
-{
+impl Ui {
     pub fn new() -> Self {
         Ui {
             focus: UiFocus::InputArea,
@@ -265,43 +261,23 @@ where
 
         let mut i = 0;
         for l in self.areas.grid_area.render().lines.iter() {
-            write!(
-                self.stdout,
-                "{}{}",
-                termion::cursor::Goto(1, 6 + i),
-                l,
-            )
-            .unwrap();
+            write!(self.stdout, "{}{}", termion::cursor::Goto(1, 6 + i), l,).unwrap();
             i += 1;
         }
 
         let mut i = 0;
         for l in self.areas.input_area.render().lines.iter() {
-            write!(
-                self.stdout,
-                "{}{}",
-                termion::cursor::Goto(1, 3 + i),
-                l,
-            )
-            .unwrap();
+            write!(self.stdout, "{}{}", termion::cursor::Goto(1, 3 + i), l,).unwrap();
             i += 1;
         }
 
         match self.focus {
             UiFocus::InputArea => {
-                write!(
-                    self.stdout,
-                    "{}===>",
-                    termion::cursor::Goto(1, 1),
-                )
-                .unwrap();
+                write!(self.stdout, "{}===>", termion::cursor::Goto(1, 1),).unwrap();
             }
-            UiFocus::GridArea => write!(
-                self.stdout,
-                "{}===>",
-                termion::cursor::Goto(1, 5),
-            )
-            .unwrap(),
+            UiFocus::GridArea => {
+                write!(self.stdout, "{}===>", termion::cursor::Goto(1, 5),).unwrap()
+            }
         }
 
         write!(
@@ -333,11 +309,8 @@ where
         rx
     }
 
-
-    pub async fn next_event(&mut self,timeout:usize) -> Event {
-
-        for _i in 0 .. timeout {
-
+    pub async fn next_event(&mut self, timeout: usize) -> Event {
+        for _i in 0..timeout {
             let c: termion::event::Key;
             match self.stdin_channel.try_recv() {
                 Ok(temp) => {
@@ -361,7 +334,7 @@ where
                             event = self.areas.grid_area.deal_new_key(c);
                         }
                     };
-                    
+
                     if event.is_some() {
                         return event.unwrap();
                     }
@@ -374,7 +347,6 @@ where
         }
         return Event::TimerSignal;
     }
-
 
     //pub async fn run(&mut self) {
     //    let mut stdout = stdout().into_raw_mode().unwrap();
