@@ -338,7 +338,6 @@ impl Ui {
                     if event.is_some() {
                         return event.unwrap();
                     }
-                    self.render();
                 }
                 Err(mpsc::TryRecvError::Empty) => {}
                 Err(mpsc::TryRecvError::Disconnected) => panic!("Channel disconnected"),
