@@ -70,23 +70,62 @@ mod tests {
     }
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone, Eq, Hash, PartialEq)]
+pub enum Camp {
+    White,
+    Black,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct BasePiece {
+    pub pos: Vec2,
+    pub camp: Camp,
+    pub name: String,
+}
+
+impl BasePiece {
+    fn new(x: i32, y: i32, camp: Camp, name: String) -> Self {
+        BasePiece {
+            pos: Vec2 { x, y },
+            camp,
+            name,
+        }
+    }
+    pub fn is_white(&self) -> bool {
+        if self.camp == Camp::White {
+            true
+        } else {
+            false
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Pawn {
+    base: BasePiece,
     double_start: bool,
 }
+
 impl Pawn {
-    fn new() -> Self {
-        Pawn { double_start: true }
+    fn new(x: i32, y: i32, camp: Camp) -> Self {
+        Pawn {
+            double_start: false,
+            base: BasePiece::new(x, y, camp, "pawn".to_string()),
+        }
     }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct King {
+    base: BasePiece,
     castling: bool,
 }
 impl King {
-    fn new() -> Self {
-        King { castling: true }
+    fn new(x: i32, y: i32, camp: Camp) -> Self {
+        King {
+            castling: true,
+            base: BasePiece::new(x, y, camp, "king".to_string()),
+        }
     }
 }
 
@@ -94,6 +133,15 @@ impl King {
 pub enum Piece {
     Pawn(Pawn),
     King(King),
+}
+
+impl Piece {
+    pub fn get_base(&self) -> BasePiece {
+        match self {
+            Piece::Pawn(p) => p.base.clone(),
+            Piece::King(p) => p.base.clone(),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -120,8 +168,8 @@ impl ChessBoard {
         };
     }
 
-    fn insert_piece(&mut self, pos: Vec2, p: Piece) {
-        self.board.insert(pos.to_string(), p);
+    fn insert_piece(&mut self, p: Piece) {
+        self.board.insert(p.get_base().pos.to_string(), p);
     }
 
     fn move_piece(&mut self, from: Vec2, to: Vec2) -> Result<(), &'static str> {
@@ -155,10 +203,17 @@ impl Game {
             stage: Stage::WhiteTurn,
             board: ChessBoard::new(),
         };
+
         game.board
-            .insert_piece(Vec2 { x: 3, y: 0 }, Piece::King(King::new()));
+            .insert_piece(Piece::King(King::new(3, 0, Camp::White)));
         game.board
-            .insert_piece(Vec2 { x: 3, y: 1 }, Piece::Pawn(Pawn::new()));
+            .insert_piece(Piece::Pawn(Pawn::new(3, 1, Camp::White)));
+
+        game.board
+            .insert_piece(Piece::King(King::new(3, 7, Camp::Black)));
+        game.board
+            .insert_piece(Piece::Pawn(Pawn::new(3, 6, Camp::Black)));
+
         game
     }
 

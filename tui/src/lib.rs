@@ -79,7 +79,7 @@ impl GridArea {
     fn render(&self) -> Frame {
         let mut lines = Vec::new();
         let empty = "    ";
-        let arrow = format!("{} -> {}", color::Fg(color::Red), color::Fg(color::White));
+        let arrow = Ui::color2(" -> ");
         let selec = " v  ";
         for y in (0..8).rev() {
             lines.push("--------------------------------------".to_string());
@@ -106,8 +106,7 @@ impl GridArea {
                 temp.push_str("|");
 
                 if val.is_some() {
-                    let mut s = val.unwrap().clone();
-                    s.truncate(4);
+                    let s = val.unwrap().clone();
                     temp.push_str(s.as_str());
                 } else {
                     temp.push_str(empty);
@@ -345,6 +344,27 @@ impl Ui {
             sleep(Duration::from_millis(1)).await;
         }
         return Event::TimerSignal;
+    }
+    pub fn base_color(s: &str) -> String {
+        format!(
+            "{}{}{}",
+            color::Fg(color::White),
+            s,
+            color::Fg(color::White)
+        )
+    }
+
+    pub fn color1(s: &str) -> String {
+        format!(
+            "{}{}{}",
+            color::Fg(color::Green),
+            s,
+            color::Fg(color::White)
+        )
+    }
+
+    pub fn color2(s: &str) -> String {
+        format!("{}{}{}", color::Fg(color::Red), s, color::Fg(color::White))
     }
 
     //pub async fn run(&mut self) {

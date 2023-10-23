@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 
-use chess_core::{Cmd, Game, MoveCmd, Vec2};
+use chess_core::{Cmd, Game, MoveCmd, Piece, Vec2};
 use server;
 use tokio::sync::mpsc;
 use tokio::time::{sleep, Duration};
@@ -97,11 +97,18 @@ impl Client {
                 self.ui.areas.grid_area.buffers.clear();
                 {
                     for ele in &self.game.lock().unwrap().board.board {
+                        let temp: String;
+                        if ele.1.get_base().is_white() {
+                            temp = Ui::color1(ele.1.get_base().name.as_str())
+                        } else {
+                            temp = Ui::color2(ele.1.get_base().name.as_str())
+                        }
+
                         self.ui
                             .areas
                             .grid_area
                             .buffers
-                            .insert(ele.0.to_string(), format!("{:?}", ele.1));
+                            .insert(ele.0.to_string(), temp);
                     }
                 }
 
