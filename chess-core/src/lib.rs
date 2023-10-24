@@ -2,7 +2,6 @@ use lexer;
 use serde::{Deserialize, Serialize};
 use serde_json;
 use std::collections::HashMap;
-use std::io::{self, BufRead};
 
 #[derive(Serialize, Deserialize, Copy, Debug, Clone, Eq, Hash, PartialEq)]
 pub struct Vec2 {
@@ -100,23 +99,21 @@ impl BasePiece {
     }
 
     pub fn is_your_turn(&self, s: &Stage) -> bool {
-        match s {
-            Stage::WhiteTurn | Stage::WhitePromotion => {
+        match s.turn {
+            Camp::White => {
                 if self.camp == Camp::White {
                     true
                 } else {
                     false
                 }
             }
-            Stage::BlackTurn | Stage::WhitePromotion => {
+            Camp::Black => {
                 if self.camp == Camp::White {
                     false
                 } else {
                     true
                 }
             }
-
-            _ => false,
         }
     }
 
@@ -192,13 +189,10 @@ impl Piece {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum Stage {
-    WhiteTurn,
-    BlackTurn,
-    WhitePromotion,
-    BlackPromotion,
-    WhiteWin,
-    BlackWin,
+pub struct Stage {
+    turn: Camp,
+    is_promotion: bool,
+    winner: Option<Camp>,
 }
 
 const ERR_PIECE_NOT_FOUND: &'static str = "piece not found";
@@ -248,7 +242,11 @@ pub struct Game {
 impl Game {
     pub fn new() -> Self {
         let mut game = Game {
-            stage: Stage::WhiteTurn,
+            stage: Stage {
+                turn: Camp::White,
+                is_promotion: false,
+                winner: None,
+            },
             board: ChessBoard::new(),
         };
 
@@ -266,30 +264,47 @@ impl Game {
     }
 
     pub fn exec_cmd(&mut self, c: &Cmd) -> Result<(), &'static str> {
-        let res = match c {
+        let game_backup = self.clone();
+
+        let res = self.exec_cmd_pre(c);
+        if res.is_err() {
+            *self = game_backup;
+            return res;
+        }
+
+        let res = self.exec_cmd_after();
+        if res.is_err() {
+            *self = game_backup;
+            return res;
+        }
+
+        Ok(())
+    }
+
+    fn exec_cmd_pre(&mut self, c: &Cmd) -> Result<(), &'static str> {
+        match c {
             Cmd::Move(x) => self.deal_move(x.from, x.to),
 
             Cmd::Promote(_) => Ok(()),
-        };
+        }
+    }
 
-        if res.is_ok() {
-            match self.stage.clone() {
-                Stage::BlackTurn => {
-                    self.stage = Stage::WhiteTurn;
-                }
+    fn exec_cmd_after(&mut self) -> Result<(), &'static str> {
+        match self.stage.clone().turn {
+            Camp::Black => {
+                self.stage.turn = Camp::White;
+            }
 
-                Stage::WhiteTurn => {
-                    self.stage = Stage::BlackTurn;
-                }
-
-                _ => {}
+            Camp::White => {
+                self.stage.turn = Camp::Black;
             }
         }
-        res
+
+        Ok(())
     }
 
     fn deal_move(&mut self, from: Vec2, to: Vec2) -> Result<(), &'static str> {
-        if let Some(p) = self.board.get_piece_mut(from) {
+        if let Some(_) = self.board.get_piece_mut(from) {
             self.deal_move_turn(from)?;
             self.deal_move_piece(from, to)?;
             self.board.move_piece(from, to)
@@ -326,16 +341,7 @@ impl Game {
                     return Err("piece can move like that");
                 }
             }
-
-            _ => {
-                self.board.move_piece(from, to).unwrap();
-                Ok(())
-            }
         }
-    }
-
-    fn pre_check(&mut self, c: &Cmd) -> bool {
-        true
     }
 
     pub fn from_str(s: &str) -> Result<Self, ()> {
@@ -350,10 +356,6 @@ impl Game {
     pub fn to_str(&self) -> String {
         let s = serde_json::to_string(self).unwrap();
         s
-    }
-
-    fn after_check(&mut self, c: &Cmd) -> bool {
-        true
     }
 }
 
