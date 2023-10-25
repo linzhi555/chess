@@ -156,6 +156,14 @@ impl Pawn {
             base: BasePiece::new(x, y, camp, "pawn".to_string()),
         }
     }
+
+    pub fn is_legal_move(&self, rmove: Vec2) -> bool {
+        if rmove.x == 0 && rmove.y == 1 {
+            true
+        } else {
+            false
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -170,7 +178,7 @@ impl King {
             base: BasePiece::new(x, y, camp, "king".to_string()),
         }
     }
-    pub fn is_legal_move(rmove: Vec2) -> bool {
+    pub fn is_legal_move(&self, rmove: Vec2) -> bool {
         if rmove.x > 1 || rmove.x < -1 {
             return false;
         }
@@ -187,10 +195,124 @@ impl King {
     }
 }
 
+fn abs(i: i32) -> i32 {
+    if i >= 0 {
+        i
+    } else {
+        -1 * i
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Queen {
+    base: BasePiece,
+}
+
+impl Queen {
+    fn new(x: i32, y: i32, camp: Camp) -> Self {
+        Queen {
+            base: BasePiece::new(x, y, camp, "quee".to_string()),
+        }
+    }
+
+    pub fn is_legal_move(&self, rmove: Vec2) -> bool {
+        if rmove.x == 0 && rmove.y == 0 {
+            return false;
+        }
+
+        if rmove.x == 0 || rmove.y == 0 {
+            return true;
+        }
+
+        if abs(rmove.x) == abs(rmove.y) {
+            return true;
+        }
+
+        false
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Bishop {
+    base: BasePiece,
+}
+
+impl Bishop {
+    fn new(x: i32, y: i32, camp: Camp) -> Self {
+        Self {
+            base: BasePiece::new(x, y, camp, "Bish".to_string()),
+        }
+    }
+
+    pub fn is_legal_move(&self, rmove: Vec2) -> bool {
+        if rmove.x == 0 && rmove.y == 0 {
+            return false;
+        }
+
+        if abs(rmove.x) == abs(rmove.y) {
+            return true;
+        }
+
+        false
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Rook {
+    base: BasePiece,
+}
+
+impl Rook {
+    fn new(x: i32, y: i32, camp: Camp) -> Self {
+        Self {
+            base: BasePiece::new(x, y, camp, "rook".to_string()),
+        }
+    }
+
+    pub fn is_legal_move(&self, rmove: Vec2) -> bool {
+        if rmove.x == 0 && rmove.y == 0 {
+            return false;
+        }
+        if rmove.x == 0 || rmove.y == 0 {
+            return true;
+        }
+        false
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Knight {
+    base: BasePiece,
+}
+
+impl Knight {
+    fn new(x: i32, y: i32, camp: Camp) -> Self {
+        Self {
+            base: BasePiece::new(x, y, camp, "Knig".to_string()),
+        }
+    }
+
+    pub fn is_legal_move(&self, rmove: Vec2) -> bool {
+        if abs(rmove.x) == 2 && abs(rmove.y) == 1 {
+            return true;
+        }
+
+        if abs(rmove.x) == 1 && abs(rmove.y) == 2 {
+            return true;
+        }
+
+        false
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum Piece {
     Pawn(Pawn),
     King(King),
+    Queen(Queen),
+    Knight(Knight),
+    Bishop(Bishop),
+    Rook(Rook),
 }
 
 impl Piece {
@@ -198,6 +320,11 @@ impl Piece {
         match self {
             Piece::Pawn(p) => p.base.clone(),
             Piece::King(p) => p.base.clone(),
+            Piece::Queen(p) => p.base.clone(),
+
+            Piece::Bishop(p) => p.base.clone(),
+            Piece::Knight(p) => p.base.clone(),
+            Piece::Rook(p) => p.base.clone(),
         }
     }
 
@@ -205,6 +332,23 @@ impl Piece {
         match *self {
             Piece::Pawn(ref mut p) => p.base.pos = newpos,
             Piece::King(ref mut p) => p.base.pos = newpos,
+            Piece::Queen(ref mut p) => p.base.pos = newpos,
+
+            Piece::Knight(ref mut p) => p.base.pos = newpos,
+            Piece::Bishop(ref mut p) => p.base.pos = newpos,
+            Piece::Rook(ref mut p) => p.base.pos = newpos,
+        }
+    }
+
+    pub fn is_legal_move(&self, relat_move: Vec2) -> bool {
+        match self {
+            Piece::Pawn(p) => p.is_legal_move(relat_move),
+            Piece::King(p) => p.is_legal_move(relat_move),
+            Piece::Queen(p) => p.is_legal_move(relat_move),
+
+            Piece::Bishop(p) => p.is_legal_move(relat_move),
+            Piece::Knight(p) => p.is_legal_move(relat_move),
+            Piece::Rook(p) => p.is_legal_move(relat_move),
         }
     }
 }
@@ -317,13 +461,39 @@ impl Game {
 
         game.board
             .insert_piece(Piece::King(King::new(3, 0, Camp::White)));
+
+        game.board
+            .insert_piece(Piece::King(King::new(3, 7, Camp::Black)));
+
         game.board
             .insert_piece(Piece::Pawn(Pawn::new(3, 1, Camp::White)));
 
         game.board
-            .insert_piece(Piece::King(King::new(3, 7, Camp::Black)));
-        game.board
             .insert_piece(Piece::Pawn(Pawn::new(3, 6, Camp::Black)));
+
+        game.board
+            .insert_piece(Piece::Queen(Queen::new(4, 0, Camp::White)));
+
+        game.board
+            .insert_piece(Piece::Queen(Queen::new(4, 7, Camp::Black)));
+
+        game.board
+            .insert_piece(Piece::Rook(Rook::new(0, 0, Camp::White)));
+
+        game.board
+            .insert_piece(Piece::Rook(Rook::new(0, 7, Camp::Black)));
+
+        game.board
+            .insert_piece(Piece::Knight(Knight::new(1, 0, Camp::White)));
+
+        game.board
+            .insert_piece(Piece::Knight(Knight::new(1, 7, Camp::Black)));
+
+        game.board
+            .insert_piece(Piece::Bishop(Bishop::new(2, 0, Camp::White)));
+
+        game.board
+            .insert_piece(Piece::Bishop(Bishop::new(2, 7, Camp::Black)));
 
         game
     }
@@ -407,23 +577,12 @@ impl Game {
 
     fn deal_move_piece(&mut self, from: Vec2, to: Vec2) -> Result<(), &'static str> {
         let piece = self.board.get_piece(from).unwrap();
-        match piece {
-            Piece::Pawn(_) => {
-                if piece.get_base().relative_move(to) == Vec2::new(0, 1) {
-                    return Ok(());
-                } else {
-                    return Err("pawn can not move like that");
-                }
-            }
 
-            Piece::King(_) => {
-                let relat_move = piece.get_base().relative_move(to);
-                if King::is_legal_move(relat_move) {
-                    return Ok(());
-                } else {
-                    return Err("king can not move like that");
-                }
-            }
+        let relat_move = piece.get_base().relative_move(to);
+        if piece.is_legal_move(relat_move) {
+            Ok(())
+        } else {
+            Err("can not move like that")
         }
     }
 
