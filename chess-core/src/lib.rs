@@ -1,6 +1,5 @@
 use lexer;
 use serde::{Deserialize, Serialize};
-use serde_json;
 use std::collections::HashMap;
 
 #[derive(Serialize, Deserialize, Copy, Debug, Clone, Eq, Hash, PartialEq)]
@@ -51,6 +50,16 @@ impl Vec2 {
 
         Ok(res)
     }
+}
+
+fn board_cells() -> Vec<Vec2> {
+    let mut res = Vec::new();
+    for x in 0..8 {
+        for y in 0..8 {
+            res.push(Vec2::new(x, y))
+        }
+    }
+    res
 }
 
 #[cfg(test)]
@@ -513,6 +522,10 @@ impl Game {
             return res;
         }
 
+        if self.stage.winner.is_some() {
+            println!("finished winner{:?}", self.stage.winner)
+        }
+
         Ok(())
     }
 
@@ -527,8 +540,6 @@ impl Game {
     fn after_check_king_dangerous(&self) -> Result<(), &'static str> {
         let our_king = self.board.get_king_of_camp(self.stage.turn);
         let opposite_piece = self.board.get_piece_of_camp(self.stage.turn.opposite());
-        println!("{:?}", our_king);
-        println!("{:?}", opposite_piece);
 
         for p in opposite_piece {
             let mut game_copy = self.clone();
@@ -540,33 +551,76 @@ impl Game {
 
             let res = game_copy.exec_cmd_pre(&cmd);
             if res.is_ok() {
-                println!("{:?}", game_copy);
                 return Err("your can not make your king be killed");
             } else {
-                println!("{:?}", res)
             }
         }
 
         Ok(())
     }
 
+    fn valid_cmds(&mut self) -> Vec<Cmd> {
+        let mut cmds = Vec::new();
+
+        let froms = board_cells();
+        let tos = board_cells();
+
+        for from in froms.clone() {
+            for to in tos.clone() {
+                let cmd = Cmd::Move(MoveCmd { from, to });
+                let mut game_copy = self.clone();
+                if game_copy.exec_cmd_pre(&cmd).is_ok() {
+                    if game_copy.after_check_king_dangerous().is_ok() {
+                        cmds.push(cmd);
+                    }
+                }
+            }
+        }
+
+        cmds
+    }
+
     fn exec_cmd_after(&mut self) -> Result<(), &'static str> {
         self.after_check_king_dangerous()?;
         self.stage.change_turn();
+        let cmds = self.valid_cmds();
+        if cmds.len() == 0 {
+            self.stage.winner = Some(self.stage.turn.opposite());
+        } else {
+            println!("{:?}", cmds);
+        }
         Ok(())
     }
 
     fn deal_move(&mut self, from: Vec2, to: Vec2) -> Result<(), &'static str> {
-        if let Some(_) = self.board.get_piece(from) {
-            self.deal_move_turn(from)?;
-            self.deal_move_piece(from, to)?;
-            self.board.move_piece(from, to)
+        self.deal_move_target_confirm(from, to)?;
+        self.deal_move_turn(from)?;
+        self.deal_move_piece(from, to)?;
+        self.board.move_piece(from, to)
+    }
+
+    fn deal_move_target_confirm(&mut self, from: Vec2, to: Vec2) -> Result<(), &'static str> {
+        if self.board.get_piece(from).is_some() {
+            if let Some(to) = self.board.get_piece(to) {
+                if to.get_base().is_camp(self.stage.turn) {
+                    return Err("can not eat the piece belong to same camp");
+                }
+            }
+
+            return Ok(());
         } else {
-            return Err("piece can not find");
+            return Err("can not find the picked piece");
         }
     }
 
     fn deal_move_turn(&mut self, from: Vec2) -> Result<(), &'static str> {
+        if self.stage.winner.is_some() {
+            return Err("game finished");
+        }
+        if self.stage.is_promotion {
+            return Err("promotion mode");
+        }
+
         let piece = self.board.get_piece(from).unwrap();
         if piece.get_base().is_your_turn(&self.stage) {
             Ok(())
@@ -584,20 +638,6 @@ impl Game {
         } else {
             Err("can not move like that")
         }
-    }
-
-    pub fn from_str(s: &str) -> Result<Self, ()> {
-        let res: serde_json::Result<Game> = serde_json::from_str(s);
-        if let Ok(b) = res {
-            Ok(b)
-        } else {
-            Err(())
-        }
-    }
-
-    pub fn to_str(&self) -> String {
-        let s = serde_json::to_string(self).unwrap();
-        s
     }
 }
 
