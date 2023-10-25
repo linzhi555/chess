@@ -84,11 +84,11 @@ impl Client {
             {
                 let event = self.ui.next_event(10).await;
                 {
+                    let noconnected_msg = "can not connect to server";
+
                     let connected = *self.connected.lock().unwrap();
-                    if connected {
-                        self.ui.areas.message = "server connecteded ".to_string();
-                    } else {
-                        self.ui.areas.message = "can not connect to server".to_string();
+                    if !connected {
+                        self.ui.areas.message = noconnected_msg.to_string();
                     }
 
                     Self::deal_func(&mut self.ui, event, connected).await;
@@ -142,7 +142,7 @@ impl Client {
                     ui.areas.grid_area.select_y = y;
                 } else {
                     ui.areas.grid_area.selected = false;
-                    let _ = game_cmd_post(
+                    let info = game_cmd_post(
                         Vec2::new(
                             ui.areas.grid_area.select_x as i32,
                             ui.areas.grid_area.select_y as i32,
@@ -150,13 +150,14 @@ impl Client {
                         Vec2::new(x as i32, y as i32),
                     )
                     .await;
+                    ui.areas.message = info;
                 }
             }
         }
     }
 }
 
-async fn game_cmd_post(from: Vec2, to: Vec2) -> Game {
+async fn game_cmd_post(from: Vec2, to: Vec2) -> String {
     let cmd = Cmd::Move(MoveCmd::new(from, to));
 
     let c = reqwest::Client::new();
@@ -168,8 +169,8 @@ async fn game_cmd_post(from: Vec2, to: Vec2) -> Game {
         .unwrap();
 
     println!("{:?}", res);
-    let game: Game = res.json().await.unwrap();
-    game
+    let s: String = res.json().await.unwrap();
+    s
     //println!("{:?}",game)
 }
 

@@ -69,10 +69,19 @@ mod tests {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Eq, Hash, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Copy, Clone, Eq, Hash, PartialEq)]
 pub enum Camp {
     White,
     Black,
+}
+
+impl Camp {
+    fn opposite(&self) -> Camp {
+        match *self {
+            Camp::White => Camp::Black,
+            Camp::Black => Camp::White,
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -92,6 +101,14 @@ impl BasePiece {
     }
     pub fn is_white(&self) -> bool {
         if self.camp == Camp::White {
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn is_camp(&self, camp: Camp) -> bool {
+        if self.camp == camp {
             true
         } else {
             false
@@ -154,11 +171,15 @@ impl King {
         }
     }
     pub fn is_legal_move(rmove: Vec2) -> bool {
-        if rmove.x != 1 && rmove.x != -1 {
+        if rmove.x > 1 || rmove.x < -1 {
             return false;
         }
 
-        if rmove.y != 1 && rmove.y != -1 {
+        if rmove.y > 1 || rmove.y < -1 {
+            return false;
+        }
+
+        if rmove.x == 0 && rmove.y == 0 {
             return false;
         }
 
@@ -195,6 +216,20 @@ pub struct Stage {
     winner: Option<Camp>,
 }
 
+impl Stage {
+    fn change_turn(&mut self) {
+        match self.clone().turn {
+            Camp::Black => {
+                self.turn = Camp::White;
+            }
+
+            Camp::White => {
+                self.turn = Camp::Black;
+            }
+        }
+    }
+}
+
 const ERR_PIECE_NOT_FOUND: &'static str = "piece not found";
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -228,8 +263,38 @@ impl ChessBoard {
         Ok(())
     }
 
-    fn get_piece_mut(&mut self, pos: Vec2) -> Option<&mut Piece> {
-        self.board.get_mut(pos.to_string().as_str())
+    fn get_piece(&mut self, pos: Vec2) -> Option<Piece> {
+        if let Some(p) = self.board.get_mut(pos.to_string().as_str()) {
+            Some(p.clone())
+        } else {
+            None
+        }
+    }
+
+    fn get_king_of_camp(&self, camp: Camp) -> King {
+        for ele in &self.board {
+            match ele.1 {
+                Piece::King(p) => {
+                    if p.base.is_camp(camp) {
+                        return p.clone();
+                    }
+                }
+
+                _ => {}
+            }
+        }
+        panic!("king not found")
+    }
+
+    fn get_piece_of_camp(&self, camp: Camp) -> Vec<Piece> {
+        let mut pieces = Vec::new();
+        for ele in &self.board {
+            let p = ele.1;
+            if p.get_base().is_camp(camp) {
+                pieces.push(p.clone())
+            }
+        }
+        pieces
     }
 }
 
@@ -289,22 +354,40 @@ impl Game {
         }
     }
 
-    fn exec_cmd_after(&mut self) -> Result<(), &'static str> {
-        match self.stage.clone().turn {
-            Camp::Black => {
-                self.stage.turn = Camp::White;
-            }
+    fn after_check_king_dangerous(&self) -> Result<(), &'static str> {
+        let our_king = self.board.get_king_of_camp(self.stage.turn);
+        let opposite_piece = self.board.get_piece_of_camp(self.stage.turn.opposite());
+        println!("{:?}", our_king);
+        println!("{:?}", opposite_piece);
 
-            Camp::White => {
-                self.stage.turn = Camp::Black;
+        for p in opposite_piece {
+            let mut game_copy = self.clone();
+            game_copy.stage.change_turn();
+            let cmd = Cmd::Move(MoveCmd {
+                from: p.get_base().pos,
+                to: our_king.base.pos,
+            });
+
+            let res = game_copy.exec_cmd_pre(&cmd);
+            if res.is_ok() {
+                println!("{:?}", game_copy);
+                return Err("your can not make your king be killed");
+            } else {
+                println!("{:?}", res)
             }
         }
 
         Ok(())
     }
 
+    fn exec_cmd_after(&mut self) -> Result<(), &'static str> {
+        self.after_check_king_dangerous()?;
+        self.stage.change_turn();
+        Ok(())
+    }
+
     fn deal_move(&mut self, from: Vec2, to: Vec2) -> Result<(), &'static str> {
-        if let Some(_) = self.board.get_piece_mut(from) {
+        if let Some(_) = self.board.get_piece(from) {
             self.deal_move_turn(from)?;
             self.deal_move_piece(from, to)?;
             self.board.move_piece(from, to)
@@ -314,7 +397,7 @@ impl Game {
     }
 
     fn deal_move_turn(&mut self, from: Vec2) -> Result<(), &'static str> {
-        let piece = self.board.get_piece_mut(from).unwrap();
+        let piece = self.board.get_piece(from).unwrap();
         if piece.get_base().is_your_turn(&self.stage) {
             Ok(())
         } else {
@@ -323,13 +406,13 @@ impl Game {
     }
 
     fn deal_move_piece(&mut self, from: Vec2, to: Vec2) -> Result<(), &'static str> {
-        let piece = self.board.get_piece_mut(from).unwrap();
-        match *piece {
+        let piece = self.board.get_piece(from).unwrap();
+        match piece {
             Piece::Pawn(_) => {
                 if piece.get_base().relative_move(to) == Vec2::new(0, 1) {
                     return Ok(());
                 } else {
-                    return Err("piece can move like that");
+                    return Err("pawn can not move like that");
                 }
             }
 
@@ -338,7 +421,7 @@ impl Game {
                 if King::is_legal_move(relat_move) {
                     return Ok(());
                 } else {
-                    return Err("piece can move like that");
+                    return Err("king can not move like that");
                 }
             }
         }

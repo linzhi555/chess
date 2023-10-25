@@ -14,9 +14,17 @@ async fn greet(name: web::Path<String>) -> impl Responder {
 #[post("/game/cmd")]
 async fn game_cmd(cmd: web::Json<Cmd>, game: web::Data<Mutex<Game>>) -> impl Responder {
     let mut game = game.lock().unwrap();
-    let _ = game.exec_cmd(&cmd);
+    let cmd_res = game.exec_cmd(&cmd);
     println!("{:?}", *game);
-    web::Json(game.clone())
+
+    let response: String;
+    if cmd_res.is_err() {
+        response = cmd_res.err().unwrap().to_string();
+    } else {
+        response = "ok".to_string();
+    }
+
+    web::Json(response)
 }
 
 #[post("/game/state")]
