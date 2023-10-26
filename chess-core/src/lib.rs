@@ -13,6 +13,44 @@ impl Vec2 {
         Vec2 { x, y }
     }
 
+    pub fn between(from: Vec2, to: Vec2) -> Vec<Vec2> {
+        if from == to {
+            return Vec::new();
+        }
+
+        let mut res = Vec::new();
+        let x_differ = to.x - from.x;
+        let y_differ = to.y - from.y;
+
+        if abs(x_differ) == abs(y_differ) {
+            let x_step = x_differ / abs(x_differ);
+            let y_step = y_differ / abs(y_differ);
+
+            for i in 1..abs(x_differ) {
+                res.push(Vec2::new(from.x + i * x_step, from.y + i * y_step));
+            }
+            return res;
+        }
+
+        if x_differ == 0 {
+            let y_step = y_differ / abs(y_differ);
+            for i in 1..abs(y_differ) {
+                res.push(Vec2::new(from.x, from.y + i * y_step));
+            }
+            return res;
+        }
+
+        if y_differ == 0 {
+            let x_step = x_differ / abs(x_differ);
+            for i in 1..abs(x_differ) {
+                res.push(Vec2::new(from.x + i * x_step, from.y));
+            }
+            return res;
+        }
+
+        Vec::new()
+    }
+
     pub fn to_string(&self) -> String {
         format!("({},{})", self.x, self.y)
     }
@@ -166,12 +204,26 @@ impl Pawn {
         }
     }
 
-    pub fn is_legal_move(&self, rmove: Vec2) -> bool {
+    fn is_legal_move(&self, rmove: Vec2) -> bool {
         if rmove.x == 0 && rmove.y == 1 {
             true
         } else {
             false
         }
+    }
+
+    pub fn deal_move(&self, to: Vec2, board: &mut ChessBoard) -> Result<(), &'static str> {
+        let relat_move = self.base.relative_move(to);
+        if !self.is_legal_move(relat_move) {
+            return Err("pawn can not move like that");
+        }
+        for pos in Vec2::between(self.base.pos, to) {
+            if board.get_piece(pos).is_some() {
+                return Err("blocked by some piece");
+            }
+        }
+
+        board.move_piece(self.base.pos, to)
     }
 }
 
@@ -201,6 +253,14 @@ impl King {
         }
 
         true
+    }
+
+    pub fn deal_move(&self, to: Vec2, board: &mut ChessBoard) -> Result<(), &'static str> {
+        let relat_move = self.base.relative_move(to);
+        if !self.is_legal_move(relat_move) {
+            return Err("king can not move like that");
+        }
+        board.move_piece(self.base.pos, to)
     }
 }
 
@@ -239,6 +299,21 @@ impl Queen {
 
         false
     }
+
+    pub fn deal_move(&self, to: Vec2, board: &mut ChessBoard) -> Result<(), &'static str> {
+        let relat_move = self.base.relative_move(to);
+        if !self.is_legal_move(relat_move) {
+            return Err("queen can not move like that");
+        }
+
+        for pos in Vec2::between(self.base.pos, to) {
+            if board.get_piece(pos).is_some() {
+                return Err("blocked by some piece");
+            }
+        }
+
+        board.move_piece(self.base.pos, to)
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -253,7 +328,7 @@ impl Bishop {
         }
     }
 
-    pub fn is_legal_move(&self, rmove: Vec2) -> bool {
+    fn is_legal_move(&self, rmove: Vec2) -> bool {
         if rmove.x == 0 && rmove.y == 0 {
             return false;
         }
@@ -263,6 +338,20 @@ impl Bishop {
         }
 
         false
+    }
+
+    pub fn deal_move(&self, to: Vec2, board: &mut ChessBoard) -> Result<(), &'static str> {
+        let relat_move = self.base.relative_move(to);
+        if !self.is_legal_move(relat_move) {
+            return Err("king can not move like that");
+        }
+        for pos in Vec2::between(self.base.pos, to) {
+            if board.get_piece(pos).is_some() {
+                return Err("blocked by some piece");
+            }
+        }
+
+        board.move_piece(self.base.pos, to)
     }
 }
 
@@ -287,6 +376,20 @@ impl Rook {
         }
         false
     }
+
+    pub fn deal_move(&self, to: Vec2, board: &mut ChessBoard) -> Result<(), &'static str> {
+        let relat_move = self.base.relative_move(to);
+        if !self.is_legal_move(relat_move) {
+            return Err("rook can not move like that");
+        }
+        for pos in Vec2::between(self.base.pos, to) {
+            if board.get_piece(pos).is_some() {
+                return Err("blocked by some piece");
+            }
+        }
+
+        board.move_piece(self.base.pos, to)
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -301,7 +404,7 @@ impl Knight {
         }
     }
 
-    pub fn is_legal_move(&self, rmove: Vec2) -> bool {
+    fn is_legal_move(&self, rmove: Vec2) -> bool {
         if abs(rmove.x) == 2 && abs(rmove.y) == 1 {
             return true;
         }
@@ -311,6 +414,14 @@ impl Knight {
         }
 
         false
+    }
+
+    pub fn deal_move(&self, to: Vec2, board: &mut ChessBoard) -> Result<(), &'static str> {
+        let relat_move = self.base.relative_move(to);
+        if !self.is_legal_move(relat_move) {
+            return Err("king can not move like that");
+        }
+        board.move_piece(self.base.pos, to)
     }
 }
 
@@ -349,15 +460,15 @@ impl Piece {
         }
     }
 
-    pub fn is_legal_move(&self, relat_move: Vec2) -> bool {
+    pub fn deal_move(&self, to: Vec2, board: &mut ChessBoard) -> Result<(), &'static str> {
         match self {
-            Piece::Pawn(p) => p.is_legal_move(relat_move),
-            Piece::King(p) => p.is_legal_move(relat_move),
-            Piece::Queen(p) => p.is_legal_move(relat_move),
+            Piece::Pawn(p) => p.deal_move(to, board),
+            Piece::King(p) => p.deal_move(to, board),
+            Piece::Queen(p) => p.deal_move(to, board),
 
-            Piece::Bishop(p) => p.is_legal_move(relat_move),
-            Piece::Knight(p) => p.is_legal_move(relat_move),
-            Piece::Rook(p) => p.is_legal_move(relat_move),
+            Piece::Bishop(p) => p.deal_move(to, board),
+            Piece::Knight(p) => p.deal_move(to, board),
+            Piece::Rook(p) => p.deal_move(to, board),
         }
     }
 }
@@ -567,11 +678,10 @@ impl Game {
 
         for from in froms.clone() {
             for to in tos.clone() {
-                let cmd = Cmd::Move(MoveCmd { from, to });
                 let mut game_copy = self.clone();
-                if game_copy.exec_cmd_pre(&cmd).is_ok() {
+                if game_copy.deal_move(from, to).is_ok() {
                     if game_copy.after_check_king_dangerous().is_ok() {
-                        cmds.push(cmd);
+                        cmds.push(Cmd::Move(MoveCmd { from, to }));
                     }
                 }
             }
@@ -595,8 +705,7 @@ impl Game {
     fn deal_move(&mut self, from: Vec2, to: Vec2) -> Result<(), &'static str> {
         self.deal_move_target_confirm(from, to)?;
         self.deal_move_turn(from)?;
-        self.deal_move_piece(from, to)?;
-        self.board.move_piece(from, to)
+        self.deal_move_piece(from, to)
     }
 
     fn deal_move_target_confirm(&mut self, from: Vec2, to: Vec2) -> Result<(), &'static str> {
@@ -632,12 +741,7 @@ impl Game {
     fn deal_move_piece(&mut self, from: Vec2, to: Vec2) -> Result<(), &'static str> {
         let piece = self.board.get_piece(from).unwrap();
 
-        let relat_move = piece.get_base().relative_move(to);
-        if piece.is_legal_move(relat_move) {
-            Ok(())
-        } else {
-            Err("can not move like that")
-        }
+        piece.deal_move(to, &mut self.board)
     }
 }
 
