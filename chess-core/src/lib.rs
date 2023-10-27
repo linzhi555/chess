@@ -237,9 +237,10 @@ impl Pawn {
             return Err("pawn can not move like that");
         }
 
-        board.move_piece(self.base.pos, to)?;
-        if let Piece::Pawn(mut p) = board.get_piece(to).unwrap() {
+        let p = board.remove_piece(self.base.pos).unwrap();
+        if let Piece::Pawn(mut p) = p {
             p.moved = true;
+            p.base.pos = to;
             board.insert_piece(Piece::Pawn(p));
             Ok(())
         } else {
@@ -251,12 +252,12 @@ impl Pawn {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct King {
     base: BasePiece,
-    castling: bool,
+    moved: bool,
 }
 impl King {
     fn new(x: i32, y: i32, camp: Camp) -> Self {
         King {
-            castling: true,
+            moved: false,
             base: BasePiece::new(x, y, camp, "king".to_string()),
         }
     }
@@ -534,18 +535,26 @@ impl ChessBoard {
     }
 
     fn move_piece(&mut self, from: Vec2, to: Vec2) -> Result<(), &'static str> {
-        let mut p: Piece;
-        if let Some(res) = self.board.get(from.to_string().as_str()) {
-            p = res.clone();
-            p.change_pos(to);
-        } else {
-            return Err(ERR_PIECE_NOT_FOUND);
+        match self.remove_piece(from) {
+            Ok(mut p) => {
+                p.change_pos(to);
+                self.board.insert(to.to_string(), p);
+                Ok(())
+            }
+
+            Err(x) => Err(x),
         }
+    }
 
-        self.board.remove(&from.to_string()).unwrap();
-        self.board.insert(to.to_string(), p);
-
-        Ok(())
+    fn remove_piece(&mut self, pos: Vec2) -> Result<Piece, &'static str> {
+        if let Some(res) = self.board.get(pos.to_string().as_str()) {
+            let p: Piece;
+            p = res.clone();
+            self.board.remove(&pos.to_string()).unwrap();
+            Ok(p)
+        } else {
+            Err(ERR_PIECE_NOT_FOUND)
+        }
     }
 
     fn get_piece(&mut self, pos: Vec2) -> Option<Piece> {
