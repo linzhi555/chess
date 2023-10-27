@@ -193,37 +193,58 @@ impl BasePiece {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Pawn {
     base: BasePiece,
-    double_start: bool,
+    moved: bool,
 }
 
 impl Pawn {
     fn new(x: i32, y: i32, camp: Camp) -> Self {
         Pawn {
-            double_start: false,
+            moved: false,
             base: BasePiece::new(x, y, camp, "pawn".to_string()),
-        }
-    }
-
-    fn is_legal_move(&self, rmove: Vec2) -> bool {
-        if rmove.x == 0 && rmove.y == 1 {
-            true
-        } else {
-            false
         }
     }
 
     pub fn deal_move(&self, to: Vec2, board: &mut ChessBoard) -> Result<(), &'static str> {
         let relat_move = self.base.relative_move(to);
-        if !self.is_legal_move(relat_move) {
+
+        if relat_move.x == 0 && relat_move.y == 1 {
+            if board.get_piece(to).is_some() {
+                return Err("pawn can move to that pos, because there already has a piece");
+            }
+        } else if relat_move.x == 0 && relat_move.y == 2 {
+            if self.moved == true {
+                return Err("the pawn only move by 2 when first move");
+            }
+
+            if board.get_piece(to).is_some() {
+                return Err("pawn can move to that pos, because there already has a piece");
+            }
+
+            for pos in Vec2::between(self.base.pos, to) {
+                if board.get_piece(pos).is_some() {
+                    return Err("blocked by some piece");
+                }
+            }
+        } else if abs(relat_move.x) == 1 && relat_move.y == 1 {
+            if let Some(p) = board.get_piece(to) {
+                if p.get_base().is_camp(self.base.camp) {
+                    return Err("can not eat the piece belong to same camp");
+                }
+            } else {
+                return Err("pawn only move to that pos , because there is no opposite camp piece");
+            }
+        } else {
             return Err("pawn can not move like that");
         }
-        for pos in Vec2::between(self.base.pos, to) {
-            if board.get_piece(pos).is_some() {
-                return Err("blocked by some piece");
-            }
-        }
 
-        board.move_piece(self.base.pos, to)
+        board.move_piece(self.base.pos, to)?;
+        if let Piece::Pawn(mut p) = board.get_piece(to).unwrap() {
+            p.moved = true;
+            board.insert_piece(Piece::Pawn(p));
+            Ok(())
+        } else {
+            panic!("wrong logic")
+        }
     }
 }
 
