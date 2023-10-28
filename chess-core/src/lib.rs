@@ -261,7 +261,7 @@ impl King {
             base: BasePiece::new(x, y, camp, "king".to_string()),
         }
     }
-    pub fn is_legal_move(&self, rmove: Vec2) -> bool {
+    pub fn is_regular_move(&self, rmove: Vec2) -> bool {
         if rmove.x > 1 || rmove.x < -1 {
             return false;
         }
@@ -277,12 +277,66 @@ impl King {
         true
     }
 
+    pub fn is_castling(&self, to:Vec2,board:& ChessBoard) -> bool {
+        if self.moved == true {
+            return false
+        }
+
+        let relat_move = self.base.relative_move(to);
+        if relat_move.y != 0 {
+            return false
+        }
+        
+        let mut possible_rook_pos_1 = to.clone();
+        let mut possible_rook_pos_2 = to.clone();
+
+        possible_rook_pos_1.x-=1;
+        possible_rook_pos_2.x+=1;
+            
+        let mut rook:Option<Rook> = None;
+        if let Some(p)= board.get_piece(possible_rook_pos_1){
+            if let Piece::Rook(r) = p{
+
+
+                rook = Some(r);
+            }
+        }else if  let Some(p)= board.get_piece(possible_rook_pos_2){
+            if let Piece::Rook(r) = p{
+                rook = Some(r);
+            }
+        }
+
+        if rook.is_some(){
+            if !rook.unwrap().moved{
+                return true
+            }
+        }
+        false
+    }
+
+
     pub fn deal_move(&self, to: Vec2, board: &mut ChessBoard) -> Result<(), &'static str> {
         let relat_move = self.base.relative_move(to);
-        if !self.is_legal_move(relat_move) {
-            return Err("king can not move like that");
+        if self.is_regular_move(relat_move) {
+            board.move_piece(self.base.pos, to)?;
+            if let Piece::King(mut k) = board.remove_piece(to).unwrap(){
+                k.moved = true;
+                board.insert_piece(Piece::King(k));
+                return Ok(())            
+            }
+            panic!("logic error");
+
         }
-        board.move_piece(self.base.pos, to)
+        if self.is_castling(to,board){
+            board.move_piece(self.base.pos, to)?;
+            if let Piece::King(mut k) = board.remove_piece(to).unwrap(){
+                k.moved = true;
+                board.insert_piece(Piece::King(k));
+                return Ok(())            
+            }
+            panic!("logic error");
+        }
+        return Err("king can not move like that");
     }
 }
 
@@ -380,12 +434,14 @@ impl Bishop {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Rook {
     base: BasePiece,
+    moved: bool,
 }
 
 impl Rook {
     fn new(x: i32, y: i32, camp: Camp) -> Self {
         Self {
             base: BasePiece::new(x, y, camp, "rook".to_string()),
+            moved:false,
         }
     }
 
@@ -557,8 +613,8 @@ impl ChessBoard {
         }
     }
 
-    fn get_piece(&mut self, pos: Vec2) -> Option<Piece> {
-        if let Some(p) = self.board.get_mut(pos.to_string().as_str()) {
+    fn get_piece(&self, pos: Vec2) -> Option<Piece> {
+        if let Some(p) = self.board.get(pos.to_string().as_str()) {
             Some(p.clone())
         } else {
             None
@@ -692,6 +748,8 @@ impl Game {
 
             let res = game_copy.exec_cmd_pre(&cmd);
             if res.is_ok() {
+
+                println!("your can not make your king be killed {:?}",p);
                 return Err("your can not make your king be killed");
             } else {
             }
