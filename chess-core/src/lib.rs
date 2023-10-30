@@ -269,39 +269,51 @@ impl King {
         true
     }
 
-    pub fn is_castling(&self, to: Vec2, board: &ChessBoard) -> bool {
+    // return Option<(Vec2,Vec2)>
+    // None: when the castlng is illegal
+    // Some: 1st Vec2: the old rook pos
+    // 2st Vec2: the new rook pos
+    pub fn is_castling(&self, to: Vec2, board: &ChessBoard) -> Result<(Vec2, Vec2), ()> {
         if self.moved == true {
-            return false;
+            return Err(());
         }
 
         let relat_move = self.base.relative_move(to);
         if relat_move.y != 0 {
-            return false;
+            return Err(());
         }
 
-        let mut possible_rook_pos_1 = to.clone();
-        let mut possible_rook_pos_2 = to.clone();
-
-        possible_rook_pos_1.x -= 1;
-        possible_rook_pos_2.x += 1;
-
         let mut rook: Option<Rook> = None;
-        if let Some(p) = board.get_piece(possible_rook_pos_1) {
-            if let Piece::Rook(r) = p {
-                rook = Some(r);
-            }
-        } else if let Some(p) = board.get_piece(possible_rook_pos_2) {
-            if let Piece::Rook(r) = p {
-                rook = Some(r);
+        let mut rook_pos = to.clone();
+        if to.x == 1 {
+            rook_pos.x = 0;
+        } else if to.x == 6 {
+            rook_pos.x = 7;
+        } else {
+            return Err(());
+        }
+
+        if let Some(p) = board.get_piece(rook_pos) {
+            if let Piece::Rook(k) = p {
+                rook = Some(k);
             }
         }
 
         if rook.is_some() {
-            if !rook.unwrap().moved {
-                return true;
+            if rook.unwrap().moved {
+                return Err(());
+            } else {
+                let mut new_rook_pos = rook_pos.clone();
+                if rook_pos.x == 0 {
+                    new_rook_pos.x = 2;
+                } else {
+                    new_rook_pos.x = 5;
+                }
+                return Ok((rook_pos, new_rook_pos));
             }
+        } else {
+            return Err(());
         }
-        false
     }
 
     pub fn deal_move(&self, to: Vec2, board: &mut ChessBoard) -> Result<(), &'static str> {
@@ -309,8 +321,9 @@ impl King {
         if self.is_regular_move(relat_move) {
             return board.move_piece(self.base.pos, to);
         }
-        if self.is_castling(to, board) {
-            return board.move_piece(self.base.pos, to);
+        if let Ok((old_rook_pos, new_rook_pos)) = self.is_castling(to, board) {
+            board.move_piece(self.base.pos, to)?;
+            return board.move_piece(old_rook_pos, new_rook_pos);
         }
         return Err("king can not move like that");
     }
@@ -651,23 +664,61 @@ impl Game {
             board: ChessBoard::new(),
         };
 
+        // pawn initilaztion
+        game.board
+            .insert_piece(Piece::Pawn(Pawn::new(0, 1, Camp::White)));
+
+        game.board
+            .insert_piece(Piece::Pawn(Pawn::new(0, 6, Camp::Black)));
+
+        game.board
+            .insert_piece(Piece::Pawn(Pawn::new(1, 1, Camp::White)));
+
+        game.board
+            .insert_piece(Piece::Pawn(Pawn::new(1, 6, Camp::Black)));
+
+        game.board
+            .insert_piece(Piece::Pawn(Pawn::new(2, 1, Camp::White)));
+
+        game.board
+            .insert_piece(Piece::Pawn(Pawn::new(2, 6, Camp::Black)));
+        game.board
+            .insert_piece(Piece::Pawn(Pawn::new(3, 1, Camp::White)));
+
+        game.board
+            .insert_piece(Piece::Pawn(Pawn::new(3, 6, Camp::Black)));
+        game.board
+            .insert_piece(Piece::Pawn(Pawn::new(4, 1, Camp::White)));
+
+        game.board
+            .insert_piece(Piece::Pawn(Pawn::new(4, 6, Camp::Black)));
+
+        game.board
+            .insert_piece(Piece::Pawn(Pawn::new(5, 1, Camp::White)));
+
+        game.board
+            .insert_piece(Piece::Pawn(Pawn::new(5, 6, Camp::Black)));
+
+        game.board
+            .insert_piece(Piece::Pawn(Pawn::new(6, 1, Camp::White)));
+
+        game.board
+            .insert_piece(Piece::Pawn(Pawn::new(6, 6, Camp::Black)));
+
+        game.board
+            .insert_piece(Piece::Pawn(Pawn::new(7, 1, Camp::White)));
+
+        game.board
+            .insert_piece(Piece::Pawn(Pawn::new(7, 6, Camp::Black)));
+
+        // king initilaztion
         game.board
             .insert_piece(Piece::King(King::new(3, 0, Camp::White)));
 
         game.board
             .insert_piece(Piece::King(King::new(3, 7, Camp::Black)));
 
-        game.board
-            .insert_piece(Piece::Pawn(Pawn::new(3, 1, Camp::White)));
-
-        game.board
-            .insert_piece(Piece::Pawn(Pawn::new(3, 6, Camp::Black)));
-
-        game.board
-            .insert_piece(Piece::Queen(Queen::new(4, 0, Camp::White)));
-
-        game.board
-            .insert_piece(Piece::Queen(Queen::new(4, 7, Camp::Black)));
+        // left side
 
         game.board
             .insert_piece(Piece::Rook(Rook::new(0, 0, Camp::White)));
@@ -686,6 +737,31 @@ impl Game {
 
         game.board
             .insert_piece(Piece::Bishop(Bishop::new(2, 7, Camp::Black)));
+
+        // right side
+        game.board
+            .insert_piece(Piece::Queen(Queen::new(4, 0, Camp::White)));
+
+        game.board
+            .insert_piece(Piece::Queen(Queen::new(4, 7, Camp::Black)));
+
+        game.board
+            .insert_piece(Piece::Rook(Rook::new(7, 0, Camp::White)));
+
+        game.board
+            .insert_piece(Piece::Rook(Rook::new(7, 7, Camp::Black)));
+
+        game.board
+            .insert_piece(Piece::Knight(Knight::new(6, 0, Camp::White)));
+
+        game.board
+            .insert_piece(Piece::Knight(Knight::new(6, 7, Camp::Black)));
+
+        game.board
+            .insert_piece(Piece::Bishop(Bishop::new(5, 0, Camp::White)));
+
+        game.board
+            .insert_piece(Piece::Bishop(Bishop::new(5, 7, Camp::Black)));
 
         game
     }
