@@ -781,6 +781,28 @@ impl Game {
             return res;
         }
 
+        // the cmd is accepted, change state  now
+
+        if let Cmd::Move(x) = c {
+            if x.to.y == 0 || x.to.y == 7 {
+                if let Some(Piece::Pawn(_)) = self.board.get_piece(x.to) {
+                    self.stage.is_promotion = true;
+                }
+            }
+        } else {
+            self.stage.is_promotion = false;
+        }
+
+        if !self.stage.is_promotion {
+            self.stage.change_turn();
+            let cmds = self.valid_cmds();
+            if cmds.len() == 0 {
+                self.stage.winner = Some(self.stage.turn.opposite());
+            } else {
+                println!("{:?}", cmds);
+            }
+        }
+
         if self.stage.winner.is_some() {
             println!("finished winner{:?}", self.stage.winner)
         }
@@ -792,8 +814,27 @@ impl Game {
         match c {
             Cmd::Move(x) => self.deal_move(x.from, x.to),
 
-            Cmd::Promote(_) => Ok(()),
+            Cmd::Promote(p) => self.deal_promote(p.from,p.to.clone()),
         }
+    }
+
+    fn deal_promote(&mut self,from: Vec2, piece: String) -> Result<(), &'static str> {
+        if !self.stage.is_promotion {
+            return Err("illegal promotion in this turn");
+        }
+        if let Some(Piece::Pawn(pawn)) = self.board.get_piece(from){
+            if pawn.base.is_camp(self.stage.turn)&&(pawn.base.pos.y == 0 || pawn.base.pos.y == 7){
+                match piece.as_str() {
+                    "queen" | "Queen"   => { self.board.insert_piece(Piece::Queen(Queen::new(pawn.base.pos.x, pawn.base.pos.y, pawn.base.camp)))}
+                    "knight" | "Knight" => { self.board.insert_piece(Piece::Knight(Knight::new(pawn.base.pos.x, pawn.base.pos.y, pawn.base.camp)))}
+                    "bishop" | "Bishop" => { self.board.insert_piece(Piece::Bishop(Bishop::new(pawn.base.pos.x, pawn.base.pos.y, pawn.base.camp)))}
+                    _ => {panic!("wrong piece type")}
+                };
+                return Ok(())
+            }
+        }
+        Err("fail to promote this peice")
+
     }
 
     fn after_check_king_dangerous(&self) -> Result<(), &'static str> {
@@ -840,15 +881,7 @@ impl Game {
     }
 
     fn exec_cmd_after(&mut self) -> Result<(), &'static str> {
-        self.after_check_king_dangerous()?;
-        self.stage.change_turn();
-        let cmds = self.valid_cmds();
-        if cmds.len() == 0 {
-            self.stage.winner = Some(self.stage.turn.opposite());
-        } else {
-            println!("{:?}", cmds);
-        }
-        Ok(())
+        self.after_check_king_dangerous()
     }
 
     fn deal_move(&mut self, from: Vec2, to: Vec2) -> Result<(), &'static str> {
