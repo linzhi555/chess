@@ -10,5 +10,6 @@ reqwest = { version = "0.11",features = ["json", "blocking", "cookies"]}
 tokio = { version = "1", features = ["full"] }
 
 chess-core={path="../chess-core"}
+lexer={path="../lexer"}
 tui={path="../tui"}
 server={path="../server"}

@@ -352,6 +352,7 @@ name = "client"
 version = "0.1.0"
 dependencies = [
  "chess-core",
+ "lexer",
  "reqwest",
  "server",
  "tokio",

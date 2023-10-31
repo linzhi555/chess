@@ -1,11 +1,13 @@
 use std::sync::{Arc, Mutex};
 
-use chess_core::{Cmd, Game, MoveCmd, Piece, Vec2};
+use chess_core::{Cmd, Game, MoveCmd, Piece, PromoteCmd, Vec2};
 use server;
 use tokio::sync::mpsc;
 use tokio::time::{sleep, Duration};
 use tokio::{self, join};
 use tui::{Areas, Event, Ui};
+
+use lexer::{self, Token};
 
 struct Client {
     connected: Arc<Mutex<bool>>,
@@ -127,7 +129,19 @@ impl Client {
 
             Event::StringInput(x) => {
                 ui.areas.message.clear();
-                ui.areas.message.push_str(x.as_str());
+                let p = parse_promot_cmd(x.as_str());
+                ui.areas.message.push_str(format!("{:?}", p).as_str());
+                if let Ok(piece) = p {
+                    let info = game_cmd_post(Cmd::Promote(PromoteCmd {
+                        from: Vec2::new(
+                            ui.areas.grid_area.cur_x as i32,
+                            ui.areas.grid_area.cur_y as i32,
+                        ),
+                        to: piece,
+                    })).await;
+
+                    ui.areas.message = info;
+                }
             }
 
             Event::GridClick(x, y) => {
@@ -142,13 +156,13 @@ impl Client {
                     ui.areas.grid_area.select_y = y;
                 } else {
                     ui.areas.grid_area.selected = false;
-                    let info = game_cmd_post(
+                    let info = game_cmd_post(Cmd::Move(MoveCmd::new(
                         Vec2::new(
                             ui.areas.grid_area.select_x as i32,
                             ui.areas.grid_area.select_y as i32,
                         ),
                         Vec2::new(x as i32, y as i32),
-                    )
+                    )))
                     .await;
                     ui.areas.message = info;
                 }
@@ -157,9 +171,34 @@ impl Client {
     }
 }
 
-async fn game_cmd_post(from: Vec2, to: Vec2) -> String {
-    let cmd = Cmd::Move(MoveCmd::new(from, to));
+fn parse_promot_cmd(s: &str) -> Result<String, String> {
+    let mut l = lexer::Lexer::new();
+    l.add_keyword("promote");
+    l.add_keyword("queen");
+    l.add_keyword("bishop");
+    l.add_keyword("rook");
+    l.add_keyword("knight");
+    l.tokenize(s);
 
+    if l.result.len() == 2 {
+        if let Token::Keyword(x) = l.result.get(0).unwrap().clone() {
+            if x == "promote" {
+                let tobe = l.result.get(1).unwrap().clone();
+                match tobe {
+                    Token::Keyword(x) => match x.as_str() {
+                        "promotion" => return Err(String::from("can not parse a PromoteCmd")),
+                        _ => return Ok(x),
+                    },
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    Err(String::from("can not parse a PromoteCmd"))
+}
+
+async fn game_cmd_post(cmd: Cmd) -> String {
     let c = reqwest::Client::new();
     let res = c
         .post("http://localhost:8080/game/cmd")

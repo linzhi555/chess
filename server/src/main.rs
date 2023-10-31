@@ -14,6 +14,7 @@ async fn greet(name: web::Path<String>) -> impl Responder {
 #[post("/game/cmd")]
 async fn game_cmd(cmd: web::Json<Cmd>, game: web::Data<Mutex<Game>>) -> impl Responder {
     let mut game = game.lock().unwrap();
+    println!("{:?}",cmd);
     let cmd_res = game.exec_cmd(&cmd);
     println!("{:?}", *game);
 

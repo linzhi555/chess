@@ -34,8 +34,8 @@ pub enum Event {
 
 #[derive(Clone)]
 pub struct GridArea {
-    cur_x: u32,
-    cur_y: u32,
+    pub cur_x: u32,
+    pub cur_y: u32,
 
     pub selected: bool,
     pub select_x: u32,

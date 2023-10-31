@@ -908,8 +908,8 @@ impl MoveCmd {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PromoteCmd {
-    from: Vec2,
-    to: String,
+    pub from: Vec2,
+    pub to: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
